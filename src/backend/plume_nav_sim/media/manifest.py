@@ -13,11 +13,6 @@ MANIFEST_FILENAME = "manifest.json"
 
 
 class SystemEnv(BaseModel):
-    """Optional environment metadata for provenance (kept minimal).
-
-    Avoid including sensitive information; intended for reproducibility hints.
-    """
-
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     hostname: Optional[str] = None
@@ -26,12 +21,6 @@ class SystemEnv(BaseModel):
 
 
 class ProvenanceManifest(BaseModel):
-    """Provenance manifest stored alongside video-derived plume datasets.
-
-    This record captures information needed to reproduce a dataset on a given
-    commit and configuration, and how it was invoked at the CLI level.
-    """
-
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -61,21 +50,6 @@ def build_provenance_manifest(
     include_env: bool = True,
     env: Optional[SystemEnv] = None,
 ) -> ProvenanceManifest:
-    """Assemble a provenance manifest with sensible defaults.
-
-    Args:
-        source_dtype: Numpy-like dtype string of the source frames (e.g. "uint8").
-        cli_args: Exact CLI argv list used to invoke the ingest.
-        git_sha: Git commit SHA for reproducibility.
-        config_hash: Stable hash/fingerprint of the resolved config (if any).
-        package_version: Package version recorded for traceability.
-        include_env: When True, include a best-effort SystemEnv snapshot.
-        env: Optional explicit SystemEnv to include; overrides include_env.
-
-    Returns:
-        ProvenanceManifest instance.
-    """
-
     system_env = (
         env if env is not None else (SystemEnv() if include_env else SystemEnv())
     )
@@ -97,10 +71,6 @@ def get_default_manifest_path(root: Path | str) -> Path:
 
 
 def write_manifest(root: Path | str, manifest: ProvenanceManifest) -> Path:
-    """Write the manifest JSON to the dataset root and return the path.
-
-    Datetime fields are serialized via Pydantic's JSON encoder.
-    """
     path = get_default_manifest_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     # Use model_dump_json to ensure proper datetime encoding

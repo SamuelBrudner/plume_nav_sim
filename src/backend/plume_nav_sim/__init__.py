@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Dict, Optional
-
-from typing_extensions import NotRequired, TypedDict
 
 from .core import (
     DEFAULT_GOAL_RADIUS,
@@ -22,42 +21,41 @@ from .core import (
     AgentState,
     Coordinates,
     CoordinateType,
-    EnvironmentConfig,
-    EpisodeState,
     GridDimensions,
     GridSize,
     InfoType,
     MovementVector,
     ObservationType,
-    PerformanceMetrics,
-    PlumeParameters,
     RenderMode,
-    RewardType,
-    StateSnapshot,
     calculate_euclidean_distance,
-    create_agent_state,
     create_coordinates,
-    create_environment_config,
-    create_episode_state,
     create_grid_size,
-    create_step_info,
     get_movement_vector,
     validate_action,
 )
+from .envs.config_types import EnvironmentConfig, create_environment_config
 
 # Optional environment exports (import may fail if optional deps are missing)
 # Predeclare symbols with precise optional types to satisfy mypy strict rules.
+PlumeEnv: Optional[object]
+create_plume_env: Optional[object]
 PlumeSearchEnv: Optional[object]
 create_plume_search_env: Optional[object]
 _ENV_IMPORT_ERROR: Optional[Exception] = None
 
 try:
+    from .envs import PlumeEnv as _PlumeEnv
     from .envs import PlumeSearchEnv as _PlumeSearchEnv
+    from .envs import create_plume_env as _create_plume_env
     from .envs import create_plume_search_env as _create_plume_search_env
 
+    PlumeEnv = _PlumeEnv
+    create_plume_env = _create_plume_env
     PlumeSearchEnv = _PlumeSearchEnv
     create_plume_search_env = _create_plume_search_env
 except Exception as env_import_error:  # pragma: no cover - optional dependency guard
+    PlumeEnv = None
+    create_plume_env = None
     PlumeSearchEnv = None
     create_plume_search_env = None
     _ENV_IMPORT_ERROR = env_import_error
@@ -69,27 +67,6 @@ def initialize_package(  # noqa: C901
     auto_register_environment: bool = True,
     validate_constants: bool = False,
 ) -> Dict[str, object]:
-    """Initialize core plume_nav_sim subsystems and return status information.
-
-    This compatibility helper keeps the legacy package-level bootstrap routine
-    available while delegating to the modern module structure.  It conditionally
-    configures logging, registers the Gymnasium environment, and can validate the
-    exported constants without raising hard failures when optional dependencies
-    are absent.
-
-    Args:
-        configure_logging: Configure the development logging profile using the
-            :mod:`plume_nav_sim.utils.logging` helpers.
-        auto_register_environment: Register the default environment with
-            Gymnasium if the dependency is available.
-        validate_constants: Run the lightweight constant consistency validation
-            utility from :mod:`plume_nav_sim.core.constants`.
-
-    Returns:
-        A dictionary containing initialization metadata, success flags, and any
-        captured errors for optional steps.
-    """
-
     status: Dict[str, object] = {
         "package_name": PACKAGE_NAME,
         "package_version": PACKAGE_VERSION,
@@ -103,12 +80,12 @@ def initialize_package(  # noqa: C901
 
     if configure_logging:
         try:
-            from plume_nav_sim.utils.logging import configure_logging_for_development
+            from plume_nav_sim.logging import configure_development_logging
 
-            configure_logging_for_development()
+            configure_development_logging()
             status["logging_configured"] = True
         except Exception as exc:  # pragma: no cover - defensive guard
-            _extracted_from_initialize_package_47(status, "configure_logging", exc)
+            _record_init_error(status, "configure_logging", exc)
     if auto_register_environment:
         try:
             from plume_nav_sim.registration import ensure_registered
@@ -116,7 +93,7 @@ def initialize_package(  # noqa: C901
             ensure_registered()
             status["environment_registered"] = True
         except Exception as exc:  # pragma: no cover - defensive guard
-            _extracted_from_initialize_package_47(status, "register_environment", exc)
+            _record_init_error(status, "register_environment", exc)
     if validate_constants:
         try:
             from plume_nav_sim.core.constants import validate_constant_consistency
@@ -125,16 +102,15 @@ def initialize_package(  # noqa: C901
             status["constants_validated"] = bool(is_valid)
             status["constant_validation_report"] = report
         except Exception as exc:  # pragma: no cover - defensive guard
-            _extracted_from_initialize_package_47(status, "validate_constants", exc)
+            _record_init_error(status, "validate_constants", exc)
     return status
 
 
-# TODO Rename this here and in `initialize_package`
-def _extracted_from_initialize_package_47(status, arg1, exc):
+def _record_init_error(status, step, exc):
     # errors is a List[dict[str, str]] but stored in a heterogeneous mapping
     errors = status.get("errors")
     if isinstance(errors, list):
-        errors.append({"step": arg1, "error": str(exc)})
+        errors.append({"step": step, "error": str(exc)})
     status["initialized"] = False
 
 
@@ -145,7 +121,7 @@ def get_package_info(
     include_performance_targets: bool = True,
     include_registration_status: bool = False,
 ) -> Dict[str, object]:
-    """Return high-level package metadata for tooling and legacy scripts."""
+    """Return package metadata for tooling."""
 
     info: Dict[str, object] = {
         "package_name": PACKAGE_NAME,
@@ -170,21 +146,15 @@ def get_package_info(
 
     if include_environment_info:
 
-        class EnvironmentDetails(TypedDict, total=False):
-            available: list[str]
-            factory: NotRequired[str]
-            module: NotRequired[str]
-            error: NotRequired[str]
+        environment_details: Dict[str, object] = {"available": []}
 
-        environment_details: EnvironmentDetails = {
-            "available": [],
-        }
-
+        if PlumeEnv is not None:
+            environment_details["available"].append("PlumeEnv")
+            environment_details["factory"] = "create_plume_env"
+            environment_details["module"] = "plume_nav_sim.envs.plume_env"
         if PlumeSearchEnv is not None:
             environment_details["available"].append("PlumeSearchEnv")
-            environment_details["factory"] = "create_plume_search_env"
-            environment_details["module"] = "plume_nav_sim.envs.plume_search_env"
-        else:
+        if not environment_details["available"]:
             environment_details["error"] = str(_ENV_IMPORT_ERROR)
 
         info["environment"] = environment_details
@@ -201,58 +171,43 @@ def get_package_info(
 
 
 def make_env(**kwargs):
-    """Create a plume navigation environment with optional customization.
+    legacy_keys = {
+        "action_type",
+        "observation_type",
+        "reward_type",
+        "plume_sigma",
+        "step_size",
+        "enable_wind",
+        "wind_direction_deg",
+        "wind_speed",
+        "wind_vector",
+        "wind_noise_std",
+    }
+    plume_value = kwargs.get("plume")
+    legacy_plume = isinstance(plume_value, str)
+    uses_legacy = legacy_plume or any(k.startswith("movie_") for k in kwargs)
+    uses_legacy = uses_legacy or any(k in kwargs for k in legacy_keys)
 
-    This is the recommended way to create environments. It provides a simple,
-    consistent interface while hiding implementation details.
-
-    Args:
-        **kwargs: Environment configuration parameters:
-            - grid_size: tuple[int, int] = (128, 128)
-            - source_location: tuple[int, int] = grid center
-            - max_steps: int = 1000
-            - goal_radius: float = 5.0
-            - action_type: str = 'discrete'  # or 'oriented'
-            - observation_type: str = 'concentration'  # or 'antennae'
-            - reward_type: str = 'sparse'  # or 'step_penalty'
-            - plume_sigma: float = 20.0
-            - render_mode: str = None  # or 'human', 'rgb_array'
-
-    Returns:
-        PlumeSearchEnv: Configured environment ready to use
-
-    Examples:
-        >>> # Simple - use defaults
-        >>> env = make_env()
-
-        >>> # Customize with built-in options
-        >>> env = make_env(
-        ...     action_type='oriented',
-        ...     observation_type='antennae',
-        ...     reward_type='step_penalty'
-        ... )
-
-        >>> # Custom grid and parameters
-        >>> env = make_env(
-        ...     grid_size=(256, 256),
-        ...     max_steps=2000,
-        ...     goal_radius=10.0
-        ... )
-    """
-    if PlumeSearchEnv is None:
-        raise RuntimeError(
-            "PlumeSearchEnv not available. Ensure gymnasium and dependencies are installed."
+    if uses_legacy:
+        if create_plume_search_env is None:
+            raise RuntimeError(
+                "Legacy PlumeSearchEnv not available to handle legacy kwargs."
+            )
+        warnings.warn(
+            "make_env received legacy kwargs; falling back to deprecated PlumeSearchEnv.",
+            DeprecationWarning,
+            stacklevel=2,
         )
-    return create_plume_search_env(**kwargs)
+        return create_plume_search_env(**kwargs)
+
+    if create_plume_env is None:
+        raise RuntimeError(
+            "PlumeEnv not available. Ensure gymnasium and dependencies are installed."
+        )
+    return create_plume_env(**kwargs)
 
 
 def get_conf_dir():
-    """Return the repository "conf" directory for Hydra configs if available.
-
-    This resolves the path relative to the installed package when running from
-    source. For installed distributions without a source tree, callers should
-    prefer hydra.initialize_config_module with a packaged config module.
-    """
     try:
         from pathlib import Path
 
@@ -283,30 +238,24 @@ __all__ = [
     "Coordinates",
     "GridSize",
     "AgentState",
-    "EpisodeState",
-    "PlumeParameters",
     "EnvironmentConfig",
-    "StateSnapshot",
-    "PerformanceMetrics",
     # Type aliases
     "ActionType",
     "CoordinateType",
     "GridDimensions",
     "MovementVector",
     "ObservationType",
-    "RewardType",
     "InfoType",
     # Utility functions
     "calculate_euclidean_distance",
     "create_coordinates",
     "create_grid_size",
-    "create_agent_state",
-    "create_episode_state",
     "create_environment_config",
-    "create_step_info",
     "validate_action",
     "get_movement_vector",
-    # Legacy/advanced
+    # Environments
+    "PlumeEnv",
+    "create_plume_env",
     "PlumeSearchEnv",
     "create_plume_search_env",
     "initialize_package",

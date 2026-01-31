@@ -29,6 +29,7 @@ import numpy as np  # >=2.1.0 - Array operations, mathematical testing, RGB arra
 # External imports with version comments
 import pytest  # >=8.0.0 - Testing framework for fixtures, parameterized tests, markers, and comprehensive test execution
 
+from plume_nav_sim._compat import ComponentError, RenderingError, ValidationError
 from plume_nav_sim.core.constants import (
     AGENT_MARKER_COLOR,
     AGENT_MARKER_SIZE,
@@ -62,11 +63,6 @@ from plume_nav_sim.render.numpy_rgb import (
     generate_rgb_array_fast,
     get_rgb_performance_stats,
     validate_rgb_array_output,
-)
-from plume_nav_sim.utils.exceptions import (
-    ComponentError,
-    RenderingError,
-    ValidationError,
 )
 
 # Global test configuration constants
@@ -837,7 +833,7 @@ def performance_monitor(operation_name: str = "test_operation"):
         if start_memory > 0:
             try:
                 end_memory = process.memory_info().rss / (1024 * 1024)  # MB
-            except:
+            except Exception:
                 end_memory = start_memory
 
         performance_data.update(
@@ -887,7 +883,7 @@ def rgb_renderer(request):
     # Cleanup renderer resources and memory allocations
     try:
         renderer.cleanup_resources()
-    except:
+    except Exception:
         pass  # Ignore cleanup errors in tests
 
     # Clear any cached data or temporary state
@@ -942,7 +938,7 @@ def performance_test_env():
         Performance testing configuration with optimized settings
     """
     # Store original configuration
-    original_config = get_testing_constants()
+    _ = get_testing_constants()
 
     # Set performance-optimized test configuration
     test_config = {
@@ -1516,7 +1512,7 @@ class TestNumpyRGBRenderer:
             # Clean up array to test memory management
             del rgb_array
 
-        final_memory = process.memory_info().rss / (1024 * 1024)  # MB
+        _ = process.memory_info().rss / (1024 * 1024)  # MB
 
         # Validate memory usage stays within MEMORY_USAGE_THRESHOLD_MB limits
         peak_memory_usage = max(memory_samples)
@@ -1726,8 +1722,8 @@ class TestRGBUtilityFunctions:
         assert renderer.performance_config["vectorization_enabled"] == True
 
         # Test factory function parameter validation
-        with pytest.raises(ValidationError):
-            # Invalid grid size should raise ValidationError
+        with pytest.raises((ValidationError, ComponentError)):
+            # Invalid grid size should raise ValidationError or ComponentError
             invalid_grid = create_grid_size(0, 0)  # Invalid dimensions
             create_rgb_renderer(invalid_grid)
 

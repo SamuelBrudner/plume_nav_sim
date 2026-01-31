@@ -1,5 +1,9 @@
 movie:
-  # Path to Zarr dataset containing concentration: (t,y,x)
+  # Registry id for curated datasets (data zoo); set auto_download=true to fetch when missing
+  dataset_id: null
+  auto_download: false
+  cache_root: null  # override data_zoo cache (defaults to ~/.cache/plume_nav_sim/data_zoo)
+  # Path to Zarr dataset containing concentration: (t,y,x); overrides dataset_id when set
   path: null
   # Optional overrides when attrs omitted or to force policies
   fps: null
@@ -7,3 +11,5 @@ movie:
   origin: null         # [y0, x0] in grid units
   extent: null         # [height, width] in grid units
   step_policy: wrap    # wrap|clamp
+  normalize: null      # Optional normalization method (minmax|robust|zscore)
+  chunks: auto         # Chunking passed to loader ("auto", None, or explicit)

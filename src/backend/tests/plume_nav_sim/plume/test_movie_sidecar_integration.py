@@ -44,7 +44,7 @@ def test_resolve_movie_dataset_path_video_sidecar_integration(tmp_path: Path) ->
         import imageio.v3 as iio  # type: ignore
 
         from plume_nav_sim.media.sidecar import get_default_sidecar_path
-        from plume_nav_sim.plume.movie_field import resolve_movie_dataset_path
+        from plume_nav_sim.plume.video import resolve_movie_dataset_path
     except Exception as e:  # pragma: no cover - optional media deps
         pytest.skip(f"required modules unavailable: {e}")
 
@@ -101,8 +101,8 @@ def test_resolve_movie_dataset_path_hdf5_sidecar_integration(tmp_path: Path) -> 
         import h5py  # type: ignore
 
         # Hard skip when optional media deps missing
-        zarr = pytest.importorskip("zarr")
-        numcodecs = pytest.importorskip("numcodecs")  # noqa: F401
+        pytest.importorskip("zarr")
+        pytest.importorskip("numcodecs")
 
         from plume_nav_sim.media import (
             MANIFEST_FILENAME,
@@ -110,7 +110,7 @@ def test_resolve_movie_dataset_path_hdf5_sidecar_integration(tmp_path: Path) -> 
             load_manifest,
         )
         from plume_nav_sim.media.sidecar import get_default_sidecar_path
-        from plume_nav_sim.plume.movie_field import resolve_movie_dataset_path
+        from plume_nav_sim.plume.video import resolve_movie_dataset_path
     except Exception as e:  # pragma: no cover - optional media deps
         pytest.skip(f"required modules unavailable: {e}")
 
@@ -186,9 +186,9 @@ def test_resolve_movie_dataset_path_conflicting_overrides_raise_validation_error
     source of truth for movie-level metadata for raw media sources.
     """
 
+    from plume_nav_sim._compat import ValidationError
     from plume_nav_sim.media.sidecar import get_default_sidecar_path
-    from plume_nav_sim.plume.movie_field import resolve_movie_dataset_path
-    from plume_nav_sim.utils.exceptions import ValidationError
+    from plume_nav_sim.plume.video import resolve_movie_dataset_path
 
     movie_path = tmp_path / "conflict.avi"
     movie_path.write_bytes(b"")

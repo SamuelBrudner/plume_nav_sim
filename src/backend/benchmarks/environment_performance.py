@@ -26,7 +26,6 @@ Performance Targets:
 """
 
 # External imports with version requirements for comprehensive performance analysis
-import contextlib  # >=3.10 - Context managers for resource management and cleanup operations
 import dataclasses  # >=3.10 - Data structure definitions for benchmark results and configuration
 import gc  # >=3.10 - Garbage collection control for memory leak detection and optimization
 import json  # >=3.10 - Benchmark result serialization and structured output generation
@@ -35,13 +34,14 @@ import pathlib  # >=3.10 - File system operations for benchmark result storage a
 import statistics  # >=3.10 - Statistical analysis including mean, median, percentile calculations
 import threading  # >=3.10 - Thread-safe performance monitoring and concurrent resource tracking
 import time  # >=3.10 - High-precision timing measurements using perf_counter for step latency analysis
+from dataclasses import dataclass as _dataclass
+from dataclasses import field as _field
 from typing import (  # >=3.10 - Type hints for comprehensive API
     Any,
     Dict,
     List,
     Optional,
     Tuple,
-    Union,
 )
 
 # Third-party imports with version comments for mathematical operations and system monitoring
@@ -49,20 +49,13 @@ import numpy as np  # >=2.1.0 - Statistical analysis, timing calculations, and p
 import psutil  # >=5.8.0 - System resource monitoring including memory usage and process-level profiling
 
 from plume_nav_sim.core.constants import (
-    DEFAULT_GRID_SIZE,
     MEMORY_LIMIT_TOTAL_MB,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
 from plume_nav_sim.core.enums import Action
-from plume_nav_sim.core.geometry import GridSize
 
 # Internal imports for environment benchmarking and validation framework integration
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
-from plume_nav_sim.utils.validation import (
-    ValidationContext,
-    ValidationResult,
-    validate_environment_config,
-)
 
 # Global configuration constants for benchmark execution and analysis
 DEFAULT_BENCHMARK_ITERATIONS = 1000
@@ -99,6 +92,42 @@ __all__ = [
     "generate_performance_report",
     "PerformanceAnalysis",
 ]
+
+
+@_dataclass
+class ValidationContext:
+    operation_name: str
+    component_name: str
+    timestamp: float
+    additional_context: Dict[str, Any] = _field(default_factory=dict)
+
+    def merge_context(self, context: Dict[str, Any]) -> None:
+        self.additional_context.update(context)
+
+    def get_context_summary(self) -> Dict[str, Any]:
+        return {
+            "operation_name": self.operation_name,
+            "component_name": self.component_name,
+            "timestamp": self.timestamp,
+            "additional_context": dict(self.additional_context),
+        }
+
+
+@_dataclass
+class ValidationResult:
+    is_valid: bool
+    operation_name: str
+    context: ValidationContext
+    errors: List[str] = _field(default_factory=list)
+    warnings: List[str] = _field(default_factory=list)
+    summary_message: str = ""
+
+    def add_error(self, message: str) -> None:
+        self.errors.append(message)
+        self.is_valid = False
+
+    def add_warning(self, message: str) -> None:
+        self.warnings.append(message)
 
 
 @dataclasses.dataclass
@@ -627,7 +656,7 @@ class BenchmarkResult:
         return result_dict
 
 
-class PerformanceAnalysis:
+class DetailedPerformanceAnalysis:
     """High-level helper that interprets benchmark output for the test suite.
 
     The original performance tests expected an object capable of summarising raw
@@ -638,7 +667,7 @@ class PerformanceAnalysis:
     """
 
     def __init__(self) -> None:
-        self.logger = logging.getLogger(f"{__name__}.PerformanceAnalysis")
+        self.logger = logging.getLogger(f"{__name__}.DetailedPerformanceAnalysis")
         self._trend_history: List[dict] = []
 
     # ------------------------------------------------------------------
@@ -2334,10 +2363,10 @@ def benchmark_memory_usage(
     return results
 
 
-def benchmark_rendering_performance(
+def benchmark_rendering_performance_detailed(
     env: PlumeSearchEnv, iterations: int = 25, mode: str = "rgb_array"
 ) -> Dict[str, Any]:
-    """Lightweight rendering benchmark used by the trimmed test harness."""
+    """Rendering benchmark with extended metrics (legacy signature)."""
 
     if mode != "rgb_array":
         raise ValueError(

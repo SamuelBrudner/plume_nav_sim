@@ -1,36 +1,15 @@
-"""
-Comprehensive reward calculation module for plume_nav_sim reinforcement learning environment
-implementing goal-based sparse reward system with distance calculations, termination logic,
-performance monitoring, and Gymnasium API compliance for episodic goal detection and agent
-guidance in plume navigation tasks.
-
-This module provides enterprise-grade reward calculation with mathematical precision,
-performance optimization, caching strategies, and comprehensive validation for production-ready
-reinforcement learning environments with sub-millisecond computation targets.
-"""
-
-import copy  # >=3.10 - Deep copy utilities for configuration cloning with nested structures
-import math  # >=3.10 - Mathematical functions for distance calculations, precision handling, and numerical operations
-import time  # >=3.10 - High-precision timing for reward calculation performance measurement and optimization analysis
-from dataclasses import (  # >=3.10 - Data class utilities for reward calculation configuration and result data structures
-    dataclass,
-    field,
-)
-from typing import (  # >=3.10 - Type hints for reward calculation methods, parameter specifications, and return value annotations
-    Any,
-    Dict,
-    Optional,
-    Tuple,
-)
+import copy
+import math
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 # Standard library imports with version comments
-import numpy as np  # >=2.1.0 - Mathematical operations, distance calculations, and floating-point precision handling
-
-from ..utils.exceptions import ComponentError, ValidationError
-from ..utils.logging import get_component_logger, monitor_performance
+import numpy as np
 
 # Internal utility imports for validation, exceptions, and logging
-from ..utils.validation import validate_coordinates
+from .._compat import ComponentError, ValidationError, validate_coordinates
+from ..logging import get_component_logger
 
 # Internal core imports for constants, types, and mathematical operations
 from .constants import (
@@ -42,15 +21,12 @@ from .constants import (
 )
 from .geometry import Coordinates, calculate_euclidean_distance
 from .state import AgentState
-from .types import PerformanceMetrics
 
-# Module version and metadata
 REWARD_CALCULATOR_VERSION = "1.0.0"
 DEFAULT_DISTANCE_CALCULATION_METHOD = "euclidean"
 REWARD_CALCULATION_CACHE_SIZE = 1000
 DISTANCE_CALCULATION_PRECISION = 1e-12
 
-# Global module exports
 __all__ = [
     "RewardCalculator",
     "RewardCalculatorConfig",
@@ -63,12 +39,6 @@ __all__ = [
 
 @dataclass
 class RewardCalculatorConfig:
-    """
-    Configuration data class for reward calculator containing goal radius, reward values,
-    performance settings, and mathematical precision parameters with comprehensive validation
-    and serialization support for flexible reward system configuration.
-    """
-
     # Primary reward calculation parameters
     goal_radius: float
     reward_goal_reached: float
@@ -84,10 +54,6 @@ class RewardCalculatorConfig:
     custom_parameters: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        """
-        Initialize reward calculator configuration with validation, default values, and parameter
-        consistency checking for mathematical accuracy and computational feasibility.
-        """
         # Validate goal_radius is non-negative float with reasonable bounds for goal detection feasibility
         if not isinstance(self.goal_radius, (int, float)) or self.goal_radius < 0:
             raise ValidationError(
@@ -152,17 +118,6 @@ class RewardCalculatorConfig:
     def validate(
         self, strict_mode: bool = False, validation_context: Optional[Dict] = None
     ) -> bool:
-        """
-        Comprehensive validation of all reward calculator configuration parameters with mathematical
-        consistency checking and performance analysis for production deployment.
-
-        Args:
-            strict_mode: Enable additional validation rules including edge case analysis
-            validation_context: Additional context for validation rules and constraints
-
-        Returns:
-            True if configuration is valid and feasible, raises ValidationError if invalid
-        """
         # Validate goal_radius is non-negative and within reasonable bounds for mathematical precision
         if self.goal_radius < 0 or self.goal_radius > 1000:
             raise ValidationError(
@@ -231,17 +186,6 @@ class RewardCalculatorConfig:
     def estimate_performance_impact(
         self, expected_episode_length: int, include_caching_benefits: bool = True
     ) -> Dict[str, Any]:
-        """
-        Estimate performance impact of reward calculation configuration including timing analysis
-        and resource usage projection for optimization planning.
-
-        Args:
-            expected_episode_length: Expected number of steps per episode
-            include_caching_benefits: Whether to include caching performance benefits
-
-        Returns:
-            Performance impact analysis with timing estimates and optimization recommendations
-        """
         # Calculate base reward calculation time based on distance computation complexity
         base_calculation_time_ms = 0.01  # Base calculation overhead
 
@@ -298,17 +242,6 @@ class RewardCalculatorConfig:
     def clone(
         self, overrides: Optional[Dict] = None, preserve_custom_parameters: bool = True
     ) -> "RewardCalculatorConfig":
-        """
-        Create deep copy of reward calculator configuration with optional parameter overrides
-        for testing and experimentation without affecting original configuration.
-
-        Args:
-            overrides: Dictionary of parameter overrides to apply
-            preserve_custom_parameters: Whether to preserve custom parameters or reset
-
-        Returns:
-            Cloned configuration with applied overrides and validation
-        """
         # Create deep copy of current configuration for parameter isolation
         cloned_config = RewardCalculatorConfig(
             goal_radius=self.goal_radius,
@@ -341,22 +274,11 @@ class RewardCalculatorConfig:
                         param_value
                     )
 
-        # Validate cloned configuration with new parameters using comprehensive validate method
         cloned_config.validate()
 
         return cloned_config
 
     def to_dict(self, include_performance_estimates: bool = False) -> Dict[str, Any]:
-        """
-        Convert reward calculator configuration to dictionary format for serialization
-        and external integration with comprehensive parameter coverage.
-
-        Args:
-            include_performance_estimates: Whether to include performance analysis in output
-
-        Returns:
-            Complete configuration dictionary with all parameters and optional performance analysis
-        """
         config_dict = {
             "goal_radius": self.goal_radius,
             "reward_goal_reached": self.reward_goal_reached,
@@ -380,12 +302,6 @@ class RewardCalculatorConfig:
 
 @dataclass
 class RewardResult:
-    """
-    Data class containing comprehensive reward calculation results including reward value,
-    goal achievement status, distance information, and performance metrics for episode
-    step coordination and analysis.
-    """
-
     # Core reward calculation results
     reward: float
     goal_reached: bool
@@ -397,10 +313,6 @@ class RewardResult:
     goal_achievement_reason: Optional[str] = field(default=None)
 
     def __post_init__(self):
-        """
-        Initialize reward result with reward value, goal status, and distance information
-        for comprehensive reward calculation reporting.
-        """
         # Validate reward value is numeric
         if not isinstance(self.reward, (int, float)) or not math.isfinite(self.reward):
             raise ValidationError(
@@ -431,14 +343,6 @@ class RewardResult:
     def set_performance_metrics(
         self, calculation_time_ms: float, calculation_details: Optional[Dict] = None
     ) -> None:
-        """
-        Set performance metrics for reward calculation including timing and computational
-        details for optimization analysis and debugging.
-
-        Args:
-            calculation_time_ms: Time taken for reward calculation in milliseconds
-            calculation_details: Additional computational context and debugging information
-        """
         # Store calculation_time_ms for performance monitoring and optimization
         if isinstance(calculation_time_ms, (int, float)) and calculation_time_ms >= 0:
             self.calculation_time_ms = float(calculation_time_ms)
@@ -452,16 +356,6 @@ class RewardResult:
             self.calculation_details["performance_warning"] = "Exceeded target latency"
 
     def to_dict(self, include_performance_data: bool = False) -> Dict[str, Any]:
-        """
-        Convert reward result to dictionary format for environment step return and analysis
-        with comprehensive result information.
-
-        Args:
-            include_performance_data: Whether to include performance metrics in output
-
-        Returns:
-            Dictionary representation of reward result with all calculation details
-        """
         result_dict = {
             "reward": self.reward,
             "goal_reached": self.goal_reached,
@@ -482,12 +376,6 @@ class RewardResult:
 
 @dataclass
 class TerminationResult:
-    """
-    Data class containing episode termination analysis including terminated/truncated flags,
-    termination reasons, and episode completion status for Gymnasium API compliance and
-    comprehensive episode lifecycle management.
-    """
-
     # Core termination flags for Gymnasium API compliance
     terminated: bool
     truncated: bool
@@ -499,10 +387,6 @@ class TerminationResult:
     termination_details: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        """
-        Initialize termination result with flags and reason for episode completion analysis
-        and Gymnasium API compliance validation.
-        """
         # Validate terminated and truncated flags are boolean and mutually exclusive when appropriate
         if not isinstance(self.terminated, bool):
             raise ValidationError(
@@ -532,15 +416,6 @@ class TerminationResult:
         final_step_count: int,
         additional_details: Optional[Dict] = None,
     ) -> None:
-        """
-        Set final episode state information for comprehensive termination analysis
-        and episode performance assessment.
-
-        Args:
-            final_distance: Final distance from agent to goal at episode end
-            final_step_count: Total number of steps taken during episode
-            additional_details: Additional termination context and analysis
-        """
         # Store final_distance for episode performance analysis
         if isinstance(final_distance, (int, float)):
             self.final_distance = float(final_distance)
@@ -556,13 +431,6 @@ class TerminationResult:
             self.termination_details.update(additional_details)
 
     def get_summary(self) -> str:
-        """
-        Generate comprehensive termination summary for logging and analysis with human-readable
-        episode completion information.
-
-        Returns:
-            Human-readable termination summary with episode completion details
-        """
         # Format termination status with terminated/truncated flags
         status_parts = []
         if self.terminated:
@@ -586,26 +454,10 @@ class TerminationResult:
 
 
 class RewardCalculator:
-    """
-    Comprehensive reward calculation class implementing goal-based sparse reward system with
-    distance calculations, performance monitoring, caching optimization, and Gymnasium API
-    compliance for reinforcement learning environment step processing and episode management.
-    """
-
     def __init__(
         self,
         config: RewardCalculatorConfig,
-        performance_metrics: Optional[PerformanceMetrics] = None,
     ):
-        """
-        Initialize reward calculator with configuration validation, performance monitoring setup,
-        and caching mechanisms for efficient reward computation.
-
-        Args:
-            config: Validated reward calculator configuration
-            performance_metrics: Optional performance metrics collection system
-        """
-        # Validate configuration using config.validate() with comprehensive parameter checking
         if not isinstance(config, RewardCalculatorConfig):
             raise ValidationError(
                 "config must be RewardCalculatorConfig instance",
@@ -618,23 +470,8 @@ class RewardCalculator:
         # Store configuration for reward calculation parameter access and validation reference
         self.config = config
 
-        # Initialize or store provided performance_metrics for timing analysis and optimization
-        self.performance_metrics = performance_metrics
-        # Backward-compat: some tests call performance_metrics.get_summary()
-        # Provide a shim on the instance without altering the class API to
-        # preserve deprecation expectations elsewhere.
-        if self.performance_metrics is not None and not hasattr(
-            self.performance_metrics, "get_summary"
-        ):
-
-            def _compat_get_summary(pm=self.performance_metrics):
-                return pm.get_performance_summary()
-
-            try:  # Best-effort; ignore if instance forbids attribute set
-                # Assign directly to avoid getattr/setattr with constant attribute name
-                self.performance_metrics.get_summary = _compat_get_summary  # type: ignore[attr-defined]
-            except Exception:
-                pass
+        # Store performance timings locally (simple list-based aggregation)
+        self.performance_metrics: Dict[str, List[float]] = {}
 
         # Create distance_cache dictionary for caching repeated distance calculations
         self.distance_cache: Dict[str, float] = {}
@@ -658,9 +495,6 @@ class RewardCalculator:
             f"reward_goal={config.reward_goal_reached}, reward_default={config.reward_default}"
         )
 
-    @monitor_performance(
-        "reward_calculation", PERFORMANCE_TARGET_STEP_LATENCY_MS, False
-    )
     def calculate_reward(
         self,
         agent_position: Coordinates,
@@ -668,24 +502,6 @@ class RewardCalculator:
         step_count: Optional[int] = None,
         calculation_context: Optional[Dict] = None,
     ) -> RewardResult:
-        """
-        Calculate reward based on agent position and goal achievement with distance analysis,
-        performance monitoring, and sparse reward implementation for reinforcement learning.
-
-        Notes:
-            ``step_count`` is accepted for compatibility with some tests and
-            call sites but is not used by the current sparse reward logic.
-            More elaborate reward strategies may use it for shaping.
-
-        Args:
-            agent_position: Current agent coordinates
-            source_location: Goal/source location coordinates
-            step_count: Optional current step number (ignored by sparse policy)
-            calculation_context: Optional context for calculation customization
-
-        Returns:
-            Comprehensive reward calculation result with goal status and performance metrics
-        """
         start_time = time.perf_counter()
 
         try:
@@ -730,11 +546,9 @@ class RewardCalculator:
                         "goal_radius": self.config.goal_radius,
                     },
                 )
-
-                if self.performance_metrics:
-                    self.performance_metrics.record_timing(
-                        "reward_calculation", calculation_time_ms
-                    )
+                self.performance_metrics.setdefault("reward_calculation", []).append(
+                    float(calculation_time_ms)
+                )
 
             # Update calculation_count and goal_achievement_stats for statistics tracking
             self.calculation_count += 1
@@ -769,19 +583,6 @@ class RewardCalculator:
         max_steps: int,
         termination_context: Optional[Dict] = None,
     ) -> TerminationResult:
-        """
-        Check episode termination conditions including goal achievement and step limits with
-        comprehensive termination analysis for Gymnasium API compliance.
-
-        Args:
-            agent_state: Current agent state with position and step information
-            source_location: Goal location coordinates for distance calculation
-            max_steps: Maximum allowed steps before truncation
-            termination_context: Optional termination context and analysis parameters
-
-        Returns:
-            Comprehensive termination analysis with terminated/truncated flags and reasons
-        """
         try:
             # Validate agent_state contains position, step_count, and goal_reached information
             if not hasattr(agent_state, "position") or not isinstance(
@@ -865,15 +666,6 @@ class RewardCalculator:
         reward_result: RewardResult,
         update_goal_status: bool = True,
     ) -> None:
-        """
-        Update agent state with calculated reward ensuring proper reward accumulation
-        and state synchronization for episode coordination.
-
-        Args:
-            agent_state: Agent state to update with reward information
-            reward_result: Calculated reward result containing reward value and goal status
-            update_goal_status: Whether to update goal achievement status in agent state
-        """
         try:
             # Validate agent_state and reward_result for proper state coordination
             if not hasattr(agent_state, "add_reward"):
@@ -923,19 +715,6 @@ class RewardCalculator:
         use_cache: bool = True,
         high_precision: bool = False,
     ) -> float:
-        """
-        Calculate optimized distance from agent position to goal with caching and precision
-        handling for efficient repeated calculations.
-
-        Args:
-            agent_position: Agent coordinates
-            goal_position: Goal coordinates
-            use_cache: Whether to use distance calculation caching
-            high_precision: Whether to use high precision calculations
-
-        Returns:
-            Distance to goal with appropriate precision for goal detection and analysis
-        """
         # Generate cache key from agent_position and goal_position coordinates
         cache_key = f"{agent_position.x},{agent_position.y}->{goal_position.x},{goal_position.y}"
 
@@ -981,17 +760,6 @@ class RewardCalculator:
         include_performance_analysis: bool = True,
         include_cache_statistics: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Get comprehensive reward calculation statistics including performance metrics, goal
-        achievement rates, and optimization analysis for system monitoring.
-
-        Args:
-            include_performance_analysis: Whether to include performance timing analysis
-            include_cache_statistics: Whether to include cache efficiency metrics
-
-        Returns:
-            Reward calculation statistics with performance analysis and optimization recommendations
-        """
         stats = {
             "total_calculations": self.calculation_count,
             "goals_achieved": self.goal_achievement_stats["goals_achieved"],
@@ -1045,13 +813,6 @@ class RewardCalculator:
         return stats
 
     def clear_cache(self) -> Dict[str, Any]:
-        """
-        Clear distance calculation cache and reset performance statistics for memory management
-        and fresh performance tracking.
-
-        Returns:
-            Cache clearing report with statistics and memory usage analysis
-        """
         # Calculate current cache size and memory usage before clearing
         cache_size_before = len(self.distance_cache)
 
@@ -1073,18 +834,6 @@ class RewardCalculator:
         source_location: Coordinates,
         validation_context: Optional[Dict] = None,
     ) -> bool:
-        """
-        Validate reward calculation parameters ensuring coordinate validity and mathematical
-        consistency for safe and accurate reward computation.
-
-        Args:
-            agent_position: Agent coordinates to validate
-            source_location: Source coordinates to validate
-            validation_context: Optional validation context with additional constraints
-
-        Returns:
-            True if parameters are valid, raises ValidationError if invalid
-        """
         try:
             # Validate agent_position using validate_coordinates with bounds checking
             validate_coordinates(agent_position)
@@ -1125,14 +874,6 @@ class RewardCalculator:
     def _update_statistics(
         self, distance: float, goal_reached: bool, calculation_time_ms: float
     ) -> None:
-        """
-        Update internal statistics tracking for performance monitoring and analysis.
-
-        Args:
-            distance: Distance calculated
-            goal_reached: Whether goal was achieved
-            calculation_time_ms: Calculation time in milliseconds
-        """
         self.goal_achievement_stats["total_calculations"] += 1
 
         # Update running average distance
@@ -1162,19 +903,6 @@ def create_reward_calculator(
     enable_performance_monitoring: bool = True,
     enable_validation: bool = True,
 ) -> RewardCalculator:
-    """
-    Factory function to create properly configured RewardCalculator with validation setup,
-    performance monitoring, and component coordination for reinforcement learning environment
-    reward computation with enterprise-grade reliability.
-
-    Args:
-        config: Optional reward calculator configuration (creates default if None)
-        enable_performance_monitoring: Whether to enable performance tracking and timing
-        enable_validation: Whether to enable parameter validation and consistency checking
-
-    Returns:
-        Fully initialized reward calculator with validated configuration and performance tracking
-    """
     # Create default RewardCalculatorConfig if none provided with system constants and parameter validation
     if config is None:
         config = RewardCalculatorConfig(
@@ -1183,7 +911,6 @@ def create_reward_calculator(
             reward_default=REWARD_DEFAULT,
         )
 
-    # Validate configuration using config.validate() with comprehensive parameter and consistency checking
     if enable_validation:
         config.validate(strict_mode=True)
 
@@ -1191,11 +918,7 @@ def create_reward_calculator(
     config.enable_performance_monitoring = enable_performance_monitoring
 
     # Initialize RewardCalculator with validated configuration and component dependencies
-    performance_metrics = (
-        PerformanceMetrics() if enable_performance_monitoring else None
-    )
-
-    reward_calculator = RewardCalculator(config, performance_metrics)
+    reward_calculator = RewardCalculator(config)
 
     # Validate complete reward calculator setup and mathematical consistency
     if enable_validation:
@@ -1213,18 +936,6 @@ def validate_reward_config(  # noqa: C901
     strict_validation: bool = False,
     validation_context: Optional[Dict] = None,
 ) -> Tuple[bool, Dict[str, Any]]:
-    """
-    Comprehensive validation of reward calculator configuration parameters ensuring mathematical
-    consistency, coordinate validity, and performance feasibility for reward computation operations.
-
-    Args:
-        config: RewardCalculatorConfig instance to validate
-        strict_validation: Whether to apply strict validation rules including edge cases
-        validation_context: Optional validation context with additional constraints
-
-    Returns:
-        Tuple of (is_valid: bool, validation_report: dict) with detailed validation analysis
-    """
     validation_report = {
         "is_valid": True,
         "errors": [],

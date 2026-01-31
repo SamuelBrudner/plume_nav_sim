@@ -9,8 +9,13 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from plume_nav_sim.compose import PolicySpec, SimulationSpec, WrapperSpec, prepare
-from plume_nav_sim.core.types import EnvironmentConfig
+from plume_nav_sim.config.composition import (
+    PolicySpec,
+    SimulationSpec,
+    WrapperSpec,
+    prepare,
+)
+from plume_nav_sim.envs.config_types import EnvironmentConfig
 from plume_nav_sim.runner import runner
 
 DEMO_ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -40,11 +45,16 @@ DEFAULT_MOVIE_ZARR = DEMO_ASSETS_DIR / "gaussian_plume_demo.zarr"
 def _build_movie_kwargs(
     plume: str,
     movie_path: Optional[str],
+    movie_dataset_id: Optional[str],
+    movie_auto_download: bool,
+    movie_cache_root: Optional[str],
     movie_fps: Optional[float],
     movie_step_policy: Optional[str],
     movie_h5_dataset: Optional[str],
+    movie_normalize: Optional[str],
+    movie_chunks: Optional[str],
 ) -> Dict[str, Any]:
-    """Resolve movie plume configuration (path, fps, step policy).
+    """Resolve movie plume configuration (registry id or path + overrides).
 
     Unit conventions
     ----------------
@@ -58,25 +68,49 @@ def _build_movie_kwargs(
     if plume != "movie":
         return {}
 
-    resolved_path = Path(movie_path) if movie_path else DEFAULT_MOVIE_ZARR
-    if not resolved_path.exists():
+    if movie_dataset_id is not None:
         raise SystemExit(
-            "Movie plume requested but dataset not found at "
-            f"{resolved_path}. Regenerate via bead 214 or pass --movie-path."
+            "--movie-dataset-id is no longer supported; provide --movie-path instead."
+        )
+    if movie_auto_download or movie_cache_root:
+        raise SystemExit(
+            "--movie-auto-download/--movie-cache-root are no longer supported; provide --movie-path instead."
+        )
+    if movie_normalize is not None or movie_chunks is not None:
+        raise SystemExit(
+            "--movie-normalize/--movie-chunks are no longer supported; pre-process the dataset before ingest."
         )
 
-    movie_kwargs: Dict[str, Any] = {"movie_path": str(resolved_path)}
-    suffix = resolved_path.suffix.lower()
-    if suffix in {".h5", ".hdf5"}:
-        if not movie_h5_dataset:
+    movie_kwargs: Dict[str, Any] = {}
+
+    # Prefer explicit local overrides; otherwise fall back to bundled asset
+    # when no registry id is provided.
+    resolved_path: Optional[Path] = None
+    if movie_path:
+        resolved_path = Path(movie_path)
+    else:
+        resolved_path = DEFAULT_MOVIE_ZARR
+
+    if resolved_path:
+        if not resolved_path.exists():
+            raise SystemExit(
+                "Movie plume requested but dataset not found at "
+                f"{resolved_path}. Provide --movie-path or --movie-dataset-id."
+            )
+
+        suffix = resolved_path.suffix.lower()
+        if suffix in {".h5", ".hdf5"} and not movie_h5_dataset:
             raise SystemExit(
                 "HDF5 movie plume requires --movie-h5-dataset to specify the dataset within the file"
             )
-        movie_kwargs["movie_h5_dataset"] = movie_h5_dataset
+        movie_kwargs["movie_path"] = str(resolved_path)
+
     if movie_fps is not None:
         movie_kwargs["movie_fps"] = float(movie_fps)
     if movie_step_policy is not None:
         movie_kwargs["movie_step_policy"] = movie_step_policy
+    if movie_h5_dataset and "movie_h5_dataset" not in movie_kwargs:
+        movie_kwargs["movie_h5_dataset"] = movie_h5_dataset
     return movie_kwargs
 
 
@@ -138,9 +172,14 @@ def run_demo(
     save_gif: Optional[str] = None,
     plume: str = "static",
     movie_path: Optional[str] = None,
+    movie_dataset_id: Optional[str] = None,
+    movie_auto_download: bool = False,
+    movie_cache_root: Optional[str] = None,
     movie_fps: Optional[float] = None,
     movie_step_policy: Optional[str] = None,
     movie_h5_dataset: Optional[str] = None,
+    movie_normalize: Optional[str] = None,
+    movie_chunks: Optional[str] = None,
 ) -> None:
     try:
         # Map human-friendly WxH string to SimulationSpec.grid_size=(W, H)
@@ -171,9 +210,14 @@ def run_demo(
     movie_kwargs = _build_movie_kwargs(
         plume=plume,
         movie_path=movie_path,
+        movie_dataset_id=movie_dataset_id,
+        movie_auto_download=bool(movie_auto_download),
+        movie_cache_root=movie_cache_root,
         movie_fps=movie_fps,
         movie_step_policy=movie_step_policy,
         movie_h5_dataset=movie_h5_dataset,
+        movie_normalize=movie_normalize,
+        movie_chunks=movie_chunks,
     )
 
     sim = SimulationSpec(
@@ -225,7 +269,7 @@ def run_demo(
     # Optional: save frames to a video using library utility (imageio required)
     if save_gif and frames:
         try:
-            from plume_nav_sim.utils.video import save_video_frames
+            from plume_nav_sim.plume.video import save_video_frames
 
             save_video_frames(frames, save_gif, fps=10)
             print(f"Saved video: {save_gif}")
@@ -274,12 +318,35 @@ def main() -> None:
         help="Select the plume source (static Gaussian or bundled movie)",
     )
     parser.add_argument(
+        "--plume-sigma",
+        type=float,
+        default=24.0,
+        help="Gaussian sigma for the static plume (ignored for movie plumes)",
+    )
+    parser.add_argument(
         "--movie-path",
         type=str,
         default=None,
         help=(
             "Path to movie plume dataset (defaults to bundled assets/gaussian_plume_demo.zarr)."
         ),
+    )
+    parser.add_argument(
+        "--movie-dataset-id",
+        type=str,
+        default=None,
+        help="Curated data-zoo id for a movie plume dataset (auto-downloadable when available).",
+    )
+    parser.add_argument(
+        "--movie-cache-root",
+        type=str,
+        default=None,
+        help="Override cache root for registry datasets (defaults to ~/.cache/plume_nav_sim/data_zoo).",
+    )
+    parser.add_argument(
+        "--movie-auto-download",
+        action="store_true",
+        help="Automatically download a registry dataset when the cache is missing.",
     )
     parser.add_argument(
         "--movie-fps",
@@ -306,6 +373,24 @@ def main() -> None:
             "Required for this CLI when --movie-path points to an HDF5 file; "
             "gives the dataset path within the file (e.g., 'Plume Data/dataset_001') "
             "and must match the h5_dataset field in the movie metadata sidecar."
+        ),
+    )
+    parser.add_argument(
+        "--movie-normalize",
+        choices=["minmax", "robust", "zscore"],
+        default=None,
+        help=(
+            "Optional normalization method for registry-backed datasets loaded via --movie-dataset-id. "
+            "Requires precomputed concentration_stats in the Zarr store."
+        ),
+    )
+    parser.add_argument(
+        "--movie-chunks",
+        choices=["auto", "none"],
+        default=None,
+        help=(
+            "Chunking strategy for registry-backed datasets loaded via --movie-dataset-id. "
+            "Use 'none' to disable dask-backed chunking."
         ),
     )
     parser.add_argument(
@@ -348,6 +433,8 @@ def main() -> None:
     def _flag_provided(flag: str) -> bool:
         return flag in sys.argv[1:]
 
+    plume_sigma_provided = _flag_provided("--plume-sigma")
+
     capture_requested = any(
         _flag_provided(f)
         for f in (
@@ -386,15 +473,37 @@ def main() -> None:
             cfg["render"] = not args.no_render
         if _flag_provided("--plume"):
             cfg["plume"] = args.plume
+
+        resolved_plume = cfg.get("plume", args.plume)
+        if resolved_plume == "movie" and plume_sigma_provided:
+            raise SystemExit("--plume-sigma is only valid for --plume static")
+        if resolved_plume == "static":
+            if plume_sigma_provided:
+                cfg["plume_sigma"] = float(args.plume_sigma)
+            else:
+                cfg.setdefault("plume_sigma", float(args.plume_sigma))
+
         # Movie-specific overrides (only meaningful for plume='movie')
         if _flag_provided("--movie-path"):
             cfg["movie_path"] = args.movie_path
+        if _flag_provided("--movie-dataset-id"):
+            cfg["movie_dataset_id"] = args.movie_dataset_id
+        if _flag_provided("--movie-auto-download"):
+            cfg["movie_auto_download"] = bool(args.movie_auto_download)
+        if _flag_provided("--movie-cache-root"):
+            cfg["movie_cache_root"] = args.movie_cache_root
         if _flag_provided("--movie-fps"):
             cfg["movie_fps"] = args.movie_fps
         if _flag_provided("--movie-step-policy"):
             cfg["movie_step_policy"] = args.movie_step_policy
         if _flag_provided("--movie-h5-dataset"):
             cfg["movie_h5_dataset"] = args.movie_h5_dataset
+        if _flag_provided("--movie-normalize"):
+            cfg["movie_normalize"] = args.movie_normalize
+        if _flag_provided("--movie-chunks"):
+            cfg["movie_chunks"] = (
+                None if args.movie_chunks == "none" else args.movie_chunks
+            )
         # Policy override
         if _flag_provided("--policy-spec"):
             cfg["policy"] = {"spec": args.policy_spec}
@@ -426,12 +535,19 @@ def main() -> None:
                 kwargs={"n": 2},
             )
         ]
+        if args.plume == "movie" and plume_sigma_provided:
+            raise SystemExit("--plume-sigma is only valid for --plume static")
         movie_kwargs = _build_movie_kwargs(
             plume=args.plume,
             movie_path=args.movie_path,
+            movie_dataset_id=args.movie_dataset_id,
+            movie_auto_download=bool(args.movie_auto_download),
+            movie_cache_root=args.movie_cache_root,
             movie_fps=args.movie_fps,
             movie_step_policy=args.movie_step_policy,
             movie_h5_dataset=args.movie_h5_dataset,
+            movie_normalize=args.movie_normalize,
+            movie_chunks=args.movie_chunks,
         )
 
         sim = SimulationSpec(
@@ -443,6 +559,7 @@ def main() -> None:
             render=(not args.no_render),
             seed=args.seed,
             plume=args.plume,
+            plume_sigma=(float(args.plume_sigma) if args.plume == "static" else None),
             policy=PolicySpec(spec=args.policy_spec),
             observation_wrappers=wrapper_specs,
             **movie_kwargs,
@@ -451,7 +568,10 @@ def main() -> None:
     # Preserve original behavior unless capture flags are provided
     if not capture_requested:
         # Non-capture: execute a single episode using the composed spec
-        env, policy = prepare(sim)
+        try:
+            env, policy = prepare(sim)
+        except (ValueError, RuntimeError, ImportError) as exc:
+            raise SystemExit(str(exc)) from exc
 
         frames: List[np.ndarray] = []
 
@@ -481,7 +601,7 @@ def main() -> None:
 
         if args.save_gif and frames:
             try:
-                from plume_nav_sim.utils.video import save_video_frames
+                from plume_nav_sim.plume.video import save_video_frames
 
                 save_video_frames(frames, args.save_gif, fps=10)
                 print(f"Saved video: {args.save_gif}")
@@ -492,7 +612,10 @@ def main() -> None:
         return
 
     # Capture mode: wrap env and record
-    env, policy = prepare(sim)
+    try:
+        env, policy = prepare(sim)
+    except (ValueError, RuntimeError, ImportError) as exc:
+        raise SystemExit(str(exc)) from exc
     from plume_nav_sim.data_capture import RunRecorder  # lazy import
     from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper  # lazy import
 
@@ -519,7 +642,7 @@ def main() -> None:
         )
         if args.save_gif and frames:
             try:
-                from plume_nav_sim.utils.video import save_video_frames
+                from plume_nav_sim.plume.video import save_video_frames
 
                 save_video_frames(frames, args.save_gif, fps=10)
                 print(f"Saved video: {args.save_gif}")

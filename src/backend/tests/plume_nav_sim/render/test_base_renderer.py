@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Union
 import numpy as np  # >=2.1.0 - Array operations for creating test concentration fields and validating rendering outputs
 import pytest  # >=8.0.0 - Testing framework for fixture usage, parametrization, exception testing, and test organization
 
+from plume_nav_sim._compat import ComponentError, RenderingError, ValidationError
 from plume_nav_sim.core.constants import (
     FIELD_DTYPE,
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
@@ -27,11 +28,6 @@ from plume_nav_sim.render.base_renderer import (
     BaseRenderer,
     RenderContext,
     create_render_context,
-)
-from plume_nav_sim.utils.exceptions import (
-    ComponentError,
-    RenderingError,
-    ValidationError,
 )
 
 # Global test constants
@@ -964,7 +960,7 @@ class TestBaseRenderer:
         slow_renderer.initialize()
 
         # Execute rendering operations and capture performance warnings
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True) as _:
             warnings.simplefilter("always")
 
             # Measure performance with slow renderer
@@ -989,7 +985,7 @@ class TestBaseRenderer:
         """Test successful resource cleanup with proper resource management and memory deallocation."""
         # Initialize renderer with resource allocation tracking
         mock_renderer.initialize()
-        initial_stats = mock_renderer.get_test_statistics()
+        _ = mock_renderer.get_test_statistics()
 
         # Perform rendering operations that allocate cached resources
         valid_context = create_render_context(
@@ -1029,7 +1025,7 @@ class TestBaseRenderer:
         slow_cleanup_renderer.initialize()
 
         # Call cleanup_resources with short timeout period
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True) as _:
             warnings.simplefilter("always")
 
             # Test cleanup with very short timeout
@@ -1164,9 +1160,7 @@ class TestBaseRenderer:
         ), f"Output shape should match grid size: {expected_shape}"
 
         # Verify performance characteristics meet targets across all grid sizes
-        performance_stats = measure_rendering_performance(
-            renderer, context, num_iterations=3
-        )
+        _ = measure_rendering_performance(renderer, context, num_iterations=3)
 
         # Cleanup
         try:

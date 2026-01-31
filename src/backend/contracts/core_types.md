@@ -430,38 +430,18 @@ class AgentState:
 
 ### Constructor Contract
 
+AgentState is constructed directly (no factory):
+
 ```python
-def create_agent_state(
-    position: Coordinates,
-    orientation: float = 0.0,
-    step_count: int = 0,
-    total_reward: float = 0.0,
-    goal_reached: bool = False
-) -> AgentState:
-    """Create validated AgentState.
-    
-    Preconditions:
-      P1: position is Coordinates
-      P2: orientation is finite float (will be normalized to [0, 360))
-      P3: step_count ≥ 0
-      P4: total_reward is finite float (can be negative)
-      P5: goal_reached ∈ {True, False}
-    
-    Postconditions:
-      C1: returns AgentState with given values
-      C2: orientation normalized to [0, 360)
-      C3: All invariants I1-I8 hold
-    
-    Raises:
-      ValidationError: If preconditions violated
-    
-    Examples:
-      create_agent_state(Coordinates(0,0)) 
-        → AgentState(position=(0,0), orientation=0.0, step_count=0, ...)
-      create_agent_state(Coordinates(10,10), orientation=450.0)
-        → AgentState(position=(10,10), orientation=90.0, ...)  # Normalized
-    """
+AgentState(position=Coordinates(0, 0))
+AgentState(position=Coordinates(10, 10), orientation=90.0, step_count=1, total_reward=0.5)
 ```
+
+Preconditions:
+- position is Coordinates
+- step_count ≥ 0
+- total_reward is finite float
+- goal_reached ∈ {True, False}
 
 ### Operations
 
@@ -625,7 +605,7 @@ def reset(self, position: Coordinates) -> None:
 # Progression tests
 def test_step_count_monotonic():
     """Step count never decreases"""
-    state = create_agent_state(Coordinates(0, 0))
+    state = AgentState(position=Coordinates(0, 0))
     
     for i in range(10):
         old_count = state.step_count
@@ -635,7 +615,7 @@ def test_step_count_monotonic():
 
 def test_total_reward_tracks_sum():
     """Total reward equals cumulative sum, negatives included"""
-    state = create_agent_state(Coordinates(0, 0))
+    state = AgentState(position=Coordinates(0, 0))
     
     expected = 0.0
     for reward in [0.0, 0.5, -0.5, -1.0, 2.0]:
@@ -645,14 +625,14 @@ def test_total_reward_tracks_sum():
 
 def test_negative_reward_allowed():
     """Negative rewards are permitted and accumulated"""
-    state = create_agent_state(Coordinates(0, 0))
+    state = AgentState(position=Coordinates(0, 0))
     state.add_reward(-1.0)
     assert state.total_reward == pytest.approx(-1.0)
 
 # Idempotency tests
 def test_mark_goal_reached_idempotent():
     """Calling multiple times is safe"""
-    state = create_agent_state(Coordinates(0, 0))
+    state = AgentState(position=Coordinates(0, 0))
     
     assert state.goal_reached == False
     state.mark_goal_reached()
@@ -662,7 +642,7 @@ def test_mark_goal_reached_idempotent():
 
 def test_cannot_unreach_goal():
     """Once reached, cannot un-reach"""
-    state = create_agent_state(Coordinates(0, 0))
+    state = AgentState(position=Coordinates(0, 0))
     state.mark_goal_reached()
     
     # No method exists to set goal_reached = False
@@ -676,7 +656,7 @@ def test_cannot_unreach_goal():
 )
 def test_agent_state_creation(position, step_count, total_reward):
     """Can create with signed reward totals"""
-    state = create_agent_state(position, step_count, total_reward)
+    state = AgentState(position=position, step_count=step_count, total_reward=total_reward)
     assert state.step_count >= 0
 ```
 

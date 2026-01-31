@@ -12,7 +12,7 @@
 This contract references types defined in other contracts:
 
 - `AgentState`: See `core_types.md` - Contains position and orientation
-- `Action`: See `core_types.md` - Enum or integer representing agent actions
+- `ActionType`: See `action_processor_interface.md` - Discrete `int` or continuous `np.ndarray`
 - `ConcentrationField`: See `concentration_field.md` - Plume sampling interface
 - `Coordinates`: See `core_types.md` - 2D integer grid position
 
@@ -39,14 +39,17 @@ Define the **universal interface** for all reward function implementations, sepa
 ### Type Signature
 
 ```python
-RewardFunction: (AgentState, Action, AgentState, ConcentrationField) → ℝ
+RewardFunction: (AgentState, ActionType, AgentState, ConcentrationField) → ℝ
 
 Where:
   - prev_state: AgentState before action
-  - action: Action taken
+  - action: Action taken (matches ActionProcessor.ActionType: int or np.ndarray)
   - next_state: AgentState after action
   - plume_field: ConcentrationField for context
   - Returns: Scalar reward value
+
+Implementations SHOULD accept the library `ConcentrationField` type and MAY also
+handle raw NumPy arrays for backward compatibility in tests or custom pipelines.
 ```
 
 ### Protocol Specification
@@ -62,7 +65,7 @@ class RewardFunction(Protocol):
     def compute_reward(
         self,
         prev_state: AgentState,
-        action: Action,
+        action: ActionType,
         next_state: AgentState,
         plume_field: ConcentrationField
     ) -> float:

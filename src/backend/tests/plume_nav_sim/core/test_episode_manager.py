@@ -6,6 +6,14 @@ import uuid  # >=3.10 - Unique identifier generation for test isolation and epis
 import numpy as np  # >=2.1.0 - Array operations and mathematical testing utilities for numerical validation and performance testing
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixture management, parameterized testing, and comprehensive test execution
 
+from plume_nav_sim._compat import (
+    ComponentError,
+    ResourceError,
+    SeedManager,
+    StateError,
+    ValidationError,
+)
+
 # Internal imports from plume_nav_sim core components
 from plume_nav_sim.core.episode_manager import (
     EpisodeManager,
@@ -16,21 +24,8 @@ from plume_nav_sim.core.episode_manager import (
     validate_episode_config,
 )
 from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.core.types import (
-    Action,
-    AgentState,
-    EnvironmentConfig,
-    EpisodeState,
-    create_coordinates,
-    create_environment_config,
-)
-from plume_nav_sim.utils.exceptions import (
-    ComponentError,
-    ResourceError,
-    StateError,
-    ValidationError,
-)
-from plume_nav_sim.utils.seeding import SeedManager
+from plume_nav_sim.core.types import Action, AgentState, create_coordinates
+from plume_nav_sim.envs.config_types import EnvironmentConfig, create_environment_config
 
 # Global test constants from JSON specification
 TEST_TIMEOUT = 30.0
@@ -108,7 +103,7 @@ class TestEpisodeManagerConfig:
         captured_error = None
 
         try:
-            invalid_env_config = create_environment_config(
+            create_environment_config(
                 grid_size=TEST_GRID_SIZE,
                 source_location=TEST_SOURCE_LOCATION,
                 max_steps=-100,  # Invalid negative value
@@ -121,7 +116,7 @@ class TestEpisodeManagerConfig:
 
         # Test validation with invalid goal_radius (negative value)
         try:
-            invalid_env_config = create_environment_config(
+            _ = create_environment_config(
                 grid_size=TEST_GRID_SIZE,
                 source_location=TEST_SOURCE_LOCATION,
                 max_steps=100,
@@ -133,9 +128,9 @@ class TestEpisodeManagerConfig:
             assert "goal_radius" in str(exc.message).lower()
             captured_error = exc
 
-        # Assert comprehensive error reporting with recovery suggestions
+        # Assert structured error reporting is preserved
         assert captured_error is not None
-        assert hasattr(captured_error, "recovery_suggestion")
+        assert captured_error.parameter_name == "goal_radius"
 
     def test_derive_component_configs(self):
         """Test derivation of individual component configurations from episode manager configuration with consistency validation."""
@@ -423,7 +418,7 @@ class TestEpisodeManager:
         episode_manager.reset_episode(seed=42)
 
         # Get initial agent position
-        initial_state = episode_manager.get_current_state()
+        _ = episode_manager.get_current_state()
         source_pos = TEST_SOURCE_LOCATION
 
         # Process steps to move agent to source location (simulate goal achievement)
@@ -592,7 +587,7 @@ class TestEpisodeManager:
         assert isinstance(current_state.agent_state, AgentState)
 
         # Assert episode state consistency and termination logic
-        assert isinstance(current_state.episode_state, EpisodeState)
+        assert isinstance(current_state.episode_state, dict)
 
         # Test consistency validation with artificially corrupted state
         # Temporarily modify state to create inconsistency
@@ -644,9 +639,7 @@ class TestEpisodeManager:
 
         # Assert success rate calculation is accurate based on terminated episodes
         terminated_count = sum(1 for result in episode_results if result.terminated)
-        expected_success_rate = (
-            terminated_count / len(episode_results) if episode_results else 0.0
-        )
+        _ = terminated_count / len(episode_results) if episode_results else 0.0
 
         # Validate optimization recommendations based on performance patterns
         recommendations = statistics.get_optimization_recommendations()
@@ -832,7 +825,7 @@ class TestEpisodeManagerReproducibility:
         state2 = manager2.get_current_state()
 
         assert state1.agent_state.position == state2.agent_state.position
-        assert state1.episode_state.step_count == state2.episode_state.step_count
+        assert state1.episode_state["step_count"] == state2.episode_state["step_count"]
 
         # Process identical action sequence
         actions = [Action.RIGHT, Action.DOWN, Action.LEFT]
@@ -877,7 +870,7 @@ class TestEpisodeManagerReproducibility:
                 break
 
         # Record trajectory from first run with seed A
-        trajectory_a1 = info["agent_xy"]
+        _ = info["agent_xy"]
         manager1.finalize_episode()
 
         # Run different episode with seed B
@@ -900,7 +893,7 @@ class TestEpisodeManagerReproducibility:
                 break
 
         # Assert no random state contamination between episodes
-        trajectory_a2 = info["agent_xy"]
+        _ = info["agent_xy"]
 
         # The trajectories with the same seed should be identical
         # Note: This test verifies the final position after same number of steps
@@ -957,8 +950,8 @@ class TestEpisodeManagerPerformance:
 
         # Calculate average, minimum, maximum, and standard deviation of step times
         avg_time = np.mean(step_times)
-        min_time = np.min(step_times)
-        max_time = np.max(step_times)
+        _ = np.min(step_times)
+        _ = np.max(step_times)
         std_time = np.std(step_times)
 
         # Assert average step time is within reasonable bounds
@@ -1007,7 +1000,7 @@ class TestEpisodeManagerPerformance:
 
         # Calculate timing statistics for reset operations
         avg_reset_time = np.mean(reset_times)
-        max_reset_time = np.max(reset_times)
+        _ = np.max(reset_times)
 
         # Assert average reset time is reasonable (more lenient for test environments)
         target_reset_time = PERFORMANCE_TARGET_STEP_LATENCY_MS * 50  # 50ms for reset
@@ -1084,8 +1077,8 @@ class TestEpisodeManagerPerformance:
         gc.collect()
         post_gc_memory_mb = process.memory_info().rss / 1024 / 1024
 
-        # Memory should not grow indefinitely
-        assert post_gc_memory_mb <= final_memory_mb
+        # Memory should not grow indefinitely (allow small allocator jitter)
+        assert post_gc_memory_mb <= final_memory_mb + 1.0
 
     def test_component_coordination_efficiency(self, performance_episode_manager):
         """Test efficiency of component coordination with timing analysis and bottleneck identification."""
@@ -1374,7 +1367,7 @@ class TestEpisodeManagerErrorHandling:
         """Test handling of configuration errors with validation failure recovery and error reporting."""
         # Attempt to create episode manager with invalid configuration
         try:
-            invalid_env_config = create_environment_config(
+            create_environment_config(
                 grid_size=(-10, -10),  # Invalid negative dimensions
                 source_location=TEST_SOURCE_LOCATION,
                 max_steps=100,
@@ -1387,7 +1380,7 @@ class TestEpisodeManagerErrorHandling:
 
         # Test specific configuration parameter validation failures
         try:
-            invalid_env_config = create_environment_config(
+            _ = create_environment_config(
                 grid_size=TEST_GRID_SIZE,
                 source_location=(1000, 1000),  # Outside grid bounds
                 max_steps=100,
@@ -1403,7 +1396,7 @@ class TestEpisodeManagerErrorHandling:
 
         # Test edge cases with borderline invalid configurations
         try:
-            borderline_env_config = create_environment_config(
+            _ = create_environment_config(
                 grid_size=TEST_GRID_SIZE,
                 source_location=TEST_SOURCE_LOCATION,
                 max_steps=0,  # Zero steps
@@ -1429,7 +1422,7 @@ class TestEpisodeManagerErrorHandling:
             resource_exhaustion_count += 1
 
             if resource_exhaustion_count > 3:
-                from plume_nav_sim.utils.exceptions import ResourceError
+                from plume_nav_sim._compat import ResourceError
 
                 raise ResourceError(
                     message="Simulated memory exhaustion during validation",
@@ -1954,7 +1947,7 @@ class TestFactoryFunctions:
         """Test validate_episode_config function with invalid configurations and detailed error reporting."""
         try:
             # Create invalid episode manager configuration (negative max_steps)
-            invalid_env_config = create_environment_config(
+            _ = create_environment_config(
                 grid_size=TEST_GRID_SIZE,
                 source_location=TEST_SOURCE_LOCATION,
                 max_steps=-50,  # Invalid

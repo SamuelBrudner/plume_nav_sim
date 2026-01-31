@@ -350,6 +350,9 @@ class AntennaeArraySensor:
 
 **Example of sensing a different environmental field.**
 
+Built-in option: `WindVectorSensor` (config: `observation_type='wind_vector'`, optional `noise_std`).
+Environment state integration: `env_state['wind_field']` is optional; sensors must return zeros if missing to keep odor-only simulations intact.
+
 ```python
 class WindSensor:
     """Wind velocity sensor - mechanosensory modality.
@@ -582,6 +585,10 @@ class TestObservationModelInterface:
 
 ### Environment Integration
 
+- Environment state **may** include `wind_field` when wind is configured; sensors must treat it as optional and degrade gracefully (e.g., return zeros) to keep odor-only simulations intact.
+
+- Config-driven environments (e.g., `EnvironmentConfig` → `create_environment_from_config`) automatically inject a constant wind field when `wind` is provided and pass it through `env_state['wind_field']`.
+
 ```python
 class PlumeSearchEnv:
     def __init__(
@@ -593,10 +600,10 @@ class PlumeSearchEnv:
     ):
         # Default to convenient odor sensing
         self.obs_model = observation_model or ConcentrationSensor()
-        
+
         # Observation space from model (can be Box, Dict, Tuple, etc.)
         self.observation_space = self.obs_model.observation_space
-        
+
         # Optional environmental features
         self.wind_model = wind_model
     
@@ -612,7 +619,7 @@ class PlumeSearchEnv:
             'time_step': self.step_count,
             'grid_size': self.grid_size
         }
-        
+
         # Optional fields (only if environment has them)
         if self.wind_model is not None:
             state['wind_field'] = self.wind_model.get_field()

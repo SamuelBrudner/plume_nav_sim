@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import plume_nav_sim as pns
+from plume_nav_sim._compat import SeedManager, ValidationError, validate_seed_value
 from plume_nav_sim.registration import ensure_registered, is_registered
-from plume_nav_sim.utils.seeding import SeedManager, validate_seed
 
 OUTPUT_PATH = Path("reproducibility_report.json")
 
@@ -42,9 +42,10 @@ def main() -> None:
     seed_manager = SeedManager()
     base_seed = 2025
 
-    is_valid, _, error = validate_seed(base_seed)
-    if not is_valid:
-        raise ValueError(f"Invalid base seed: {error}")
+    try:
+        validate_seed_value(base_seed)
+    except ValidationError as exc:
+        raise ValueError(f"Invalid base seed: {exc}") from exc
 
     ensure_registered()
     assert is_registered()
@@ -57,10 +58,9 @@ def main() -> None:
             "episodes": [],
         }
 
-        for idx in range(3):
-            child_seed = seed_manager.generate_episode_seed(
-                base_seed, episode_number=idx, experiment_id="reproducibility"
-            )
+        seed_manager.seed(base_seed)
+        for _idx in range(3):
+            child_seed = int(seed_manager.rng.integers(0, 2**31 - 1))
             episode = run_episode(env, seed=child_seed)
             summary["episodes"].append(episode)
     finally:

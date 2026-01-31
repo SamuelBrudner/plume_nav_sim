@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import numpy as np
@@ -8,17 +7,19 @@ import pytest
 
 
 def test_ingest_cli_and_loader_smoke(tmp_path: Path) -> None:
-    # Require xarray and core plume_nav_sim modules; imageio only needed if we synthesize frames
-    try:
-        import xarray as xr  # type: ignore
+    # Require media deps for reading Zarr; imageio only needed if we synthesize frames
+    xr = pytest.importorskip("xarray")
+    pytest.importorskip("zarr")
+    pytest.importorskip("numcodecs")
 
+    try:
         from plume_nav_sim.cli import video_ingest
         from plume_nav_sim.media import (
             MANIFEST_FILENAME,
             get_default_manifest_path,
             load_manifest,
         )
-        from plume_nav_sim.plume.movie_field import MovieConfig, MoviePlumeField
+        from plume_nav_sim.plume.video import VideoConfig, VideoPlume
     except Exception as e:
         pytest.skip(f"required modules unavailable: {e}")
 
@@ -86,15 +87,15 @@ def test_ingest_cli_and_loader_smoke(tmp_path: Path) -> None:
     m = load_manifest(out_zarr)
     assert hasattr(m, "source_dtype") and isinstance(getattr(m, "source_dtype"), str)
 
-    # 4) Loader smoke: MoviePlumeField
-    field = MoviePlumeField(MovieConfig(path=str(out_zarr), step_policy="wrap"))
+    # 4) Loader smoke: VideoPlume
+    field = VideoPlume(VideoConfig(path=str(out_zarr), step_policy="wrap"))
     # Determinism check at a fixed step
     field.advance_to_step(3)
     a = field.field_array.copy()
     field.on_reset()
     field.advance_to_step(3)
     b = field.field_array.copy()
-    assert np.array_equal(a, b), "MoviePlumeField not deterministic at fixed step"
+    assert np.array_equal(a, b), "VideoPlume not deterministic at fixed step"
 
     # Frame type/shape sanity
     assert a.dtype == np.float32

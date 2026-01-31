@@ -1,36 +1,3 @@
-"""
-Rendering Module Initialization for Plume Navigation Simulation
-
-This module provides unified access to dual-mode plume navigation visualization components
-including BaseRenderer abstract interface, NumpyRGBRenderer for programmatic RGB arrays,
-MatplotlibRenderer for interactive human mode, ColorSchemeManager for consistent color
-management, and factory functions for streamlined renderer creation with performance
-optimization and cross-platform compatibility support.
-
-The rendering pipeline supports two primary modes:
-- RGB_ARRAY: High-performance NumPy array generation for machine learning pipelines
-- HUMAN: Interactive matplotlib visualization for research and debugging
-
-Key Components:
-- BaseRenderer: Abstract interface defining rendering contracts
-- NumpyRGBRenderer: Optimized RGB array renderer targeting <5ms generation
-- MatplotlibRenderer: Interactive visualization with backend management
-- ColorSchemeManager: Comprehensive color scheme management with accessibility support
-- Factory Functions: Streamlined renderer creation with performance optimization
-
-Architecture Features:
-- Cross-platform compatibility with graceful fallback mechanisms
-- Performance optimization targeting RGB <5ms, human mode <50ms updates
-- Comprehensive error handling and resource management
-- Extensive logging and debugging support
-- Enterprise-ready configuration management
-
-External Dependencies:
-- typing>=3.10: Type hints for factory functions and public API typing
-- logging>=3.10: Module-level logging for operations and error reporting
-- warnings>=3.10: Compatibility warnings for backend availability and limitations
-"""
-
 import atexit
 import contextlib
 import gc
@@ -42,11 +9,9 @@ import warnings
 # Standard library imports for configuration and logging
 from typing import Any, Dict, Optional, Tuple
 
-# Internal imports from core types module
+from .._compat import ValidationError
 from ..core.types import GridSize, RenderMode
-from ..utils.exceptions import ValidationError
-
-# Internal imports from base renderer module
+from .adapter import RendererAdapter
 from .base_renderer import (
     BaseRenderer,
     RenderContext,
@@ -54,8 +19,6 @@ from .base_renderer import (
     create_render_context,
     validate_rendering_parameters,
 )
-
-# Internal imports from color scheme management module
 from .color_schemes import (
     ColorSchemeManager,
     CustomColorScheme,
@@ -63,16 +26,12 @@ from .color_schemes import (
     create_color_scheme,
     get_default_scheme,
 )
-
-# Internal imports from matplotlib visualization module
 from .matplotlib_viz import (
     MatplotlibBackendManager,
     MatplotlibRenderer,
     create_matplotlib_renderer,
     detect_matplotlib_capabilities,
 )
-
-# Internal imports from NumPy RGB renderer module
 from .numpy_rgb import (
     NumpyRGBRenderer,
     create_rgb_renderer,
@@ -80,7 +39,6 @@ from .numpy_rgb import (
     validate_rgb_array_output,
 )
 
-# Module-level logger configuration
 _logger = logging.getLogger("plume_nav_sim.render")
 _logger.setLevel(logging.INFO)
 
@@ -110,7 +68,6 @@ _DEFAULT_MATPLOTLIB_CONFIG = {
     "resource_cleanup_interval": 10,  # renders between cleanup
 }
 
-# Global renderer registry for resource tracking and management
 _RENDERER_REGISTRY = {}
 
 # Performance and resource management constants
@@ -120,10 +77,6 @@ _PERFORMANCE_WARNING_THRESHOLD_MS = 100
 
 
 def _get_color_scheme(color_scheme_name: Optional[str]):
-    """Create a color scheme or fall back to default with logging.
-
-    Returns a valid color scheme object.
-    """
     try:
         if color_scheme_name:
             scheme = create_color_scheme(color_scheme_name, validate_accessibility=True)
@@ -580,42 +533,6 @@ def create_dual_mode_renderer(
     enable_matplotlib_fallback: bool = True,
     renderer_options: Optional[dict] = None,
 ) -> Dict[str, Any]:
-    """
-    Factory function to create dual-mode renderer supporting both RGB array and human
-    visualization modes with intelligent backend selection, performance optimization,
-    and unified color scheme management for comprehensive plume navigation visualization.
-
-    This function creates a unified rendering system that can seamlessly switch between
-    RGB array mode (for programmatic processing) and human mode (for interactive
-    visualization), providing fallback mechanisms and performance optimization.
-
-    Args:
-        grid_size: Grid dimensions for renderer configuration and memory allocation
-        color_scheme_name: Optional color scheme name, defaults to standard scheme
-        primary_mode: Preferred rendering mode, defaults to RGB_ARRAY for performance
-        enable_rgb_fallback: Whether to enable RGB fallback for matplotlib failures
-        enable_matplotlib_fallback: Whether to enable matplotlib fallback for headless environments
-        renderer_options: Optional configuration overrides for fine-tuning performance
-
-    Returns:
-        dict: Dictionary containing RGB and matplotlib renderers with unified interface
-              and fallback configuration, including performance metrics and capability info
-
-    Raises:
-        ValidationError: If grid_size validation fails or renderer creation encounters errors
-        ConfigurationError: If renderer_options contain invalid configuration parameters
-
-    Example:
-        >>> from plume_nav_sim.core.types import GridSize, RenderMode
-        >>> grid = GridSize(128, 128)
-        >>> dual_renderer = create_dual_mode_renderer(
-        ...     grid_size=grid,
-        ...     primary_mode=RenderMode.HUMAN,
-        ...     color_scheme_name="high_contrast"
-        ... )
-        >>> rgb_renderer = dual_renderer['rgb_renderer']
-        >>> matplotlib_renderer = dual_renderer['matplotlib_renderer']
-    """
     _logger.info(f"Creating dual-mode renderer for grid size {grid_size.to_tuple()}")
 
     try:
@@ -666,7 +583,6 @@ def create_dual_mode_renderer(
             f"Primary={primary_mode}"
         )
 
-        # Return comprehensive dual-mode renderer dictionary
         return {
             "unified_renderer": unified_renderer,
             "rgb_renderer": rgb_renderer,
@@ -697,41 +613,7 @@ def validate_renderer_config(
     check_accessibility: bool = False,
     strict_validation: bool = False,
 ) -> Tuple[bool, Dict[str, Any]]:
-    """
-    Comprehensive validation function for renderer configuration ensuring compatibility,
-    performance feasibility, accessibility compliance, and system capability assessment
-    for robust plume navigation visualization setup.
-
-    This function performs thorough validation of renderer configuration parameters,
-    system capabilities, performance requirements, and accessibility standards to
-    ensure optimal rendering setup and identify potential issues before runtime.
-
-    Args:
-        renderer_config: Dictionary containing renderer configuration parameters
-        check_system_capabilities: Whether to verify system rendering capabilities
-        check_performance_targets: Whether to validate against performance targets
-        check_accessibility: Whether to check accessibility compliance for color schemes
-        strict_validation: Whether to apply strict validation rules with comprehensive testing
-
-    Returns:
-        tuple: (is_valid: bool, validation_report: dict) with comprehensive analysis
-               and optimization recommendations for configuration improvement
-
-    Raises:
-        ValidationError: If critical validation failures occur in strict mode
-
-    Example:
-        >>> config = {
-        ...     'grid_size': (128, 128),
-        ...     'color_scheme': 'high_contrast',
-        ...     'render_modes': ['rgb_array', 'human'],
-        ...     'performance_targets': {'rgb_ms': 5, 'human_ms': 50}
-        ... }
-        >>> is_valid, report = validate_renderer_config(config, check_accessibility=True)
-        >>> if not is_valid:
-        ...     print("Configuration issues found:", report['warnings'])
-    """
-    _logger.debug("Starting comprehensive renderer configuration validation")
+    _logger.debug("Starting renderer configuration validation")
 
     validation_report = {
         "is_valid": True,
@@ -935,33 +817,7 @@ def detect_rendering_capabilities(
     test_color_scheme_support: bool = False,
     generate_recommendations: bool = True,
 ) -> Dict[str, Any]:
-    """
-    System capability detection function for comprehensive rendering support assessment
-    including matplotlib backend availability, NumPy performance characteristics,
-    color scheme compatibility, and cross-platform rendering support analysis.
-
-    This function systematically evaluates the current system's rendering capabilities,
-    identifying available backends, performance characteristics, and potential limitations
-    to provide comprehensive capability reporting and optimization recommendations.
-
-    Args:
-        test_matplotlib_backends: Whether to test matplotlib backend availability and compatibility
-        test_performance_characteristics: Whether to benchmark NumPy and rendering performance
-        test_color_scheme_support: Whether to validate color scheme and colormap support
-        generate_recommendations: Whether to generate optimization and configuration recommendations
-
-    Returns:
-        dict: Comprehensive capabilities report with backend availability, performance metrics,
-              compatibility analysis, and optimization recommendations for informed renderer selection
-
-    Example:
-        >>> capabilities = detect_rendering_capabilities(test_performance_characteristics=True)
-        >>> if capabilities['matplotlib_backends']:
-        ...     print("Available backends:", capabilities['matplotlib_backends'])
-        >>> if not capabilities['display_available']:
-        ...     print("Running in headless mode")
-    """
-    _logger.debug("Starting comprehensive rendering capability detection")
+    _logger.debug("Starting rendering capability detection")
 
     capabilities = {
         "detection_timestamp": logging.time.time(),
@@ -1115,19 +971,6 @@ def _extracted_from_detect_rendering_capabilities_65(np, capabilities):
 def _register_cleanup_handlers(  # noqa: C901
     renderer_registry: Dict[str, Any], enable_automatic_cleanup: bool = True
 ) -> None:
-    """
-    Internal function to register cleanup handlers for renderer resource management
-    including matplotlib figure disposal, cache clearing, and memory cleanup for
-    proper system resource management and prevention of memory leaks.
-
-    Args:
-        renderer_registry: Dictionary containing active renderer instances
-        enable_automatic_cleanup: Whether to enable periodic automatic cleanup
-
-    Returns:
-        None: Registers cleanup handlers with atexit and signal handlers
-    """
-
     def cleanup_all_renderers():
         """Clean up all registered renderers and their resources."""
         try:
@@ -1173,11 +1016,6 @@ def _register_cleanup_handlers(  # noqa: C901
 
     # Set up signal handlers for graceful shutdown
     def signal_handler(signum, frame):
-        """Handle shutdown signals gracefully without terminating the process.
-
-        Avoid calling sys.exit() to prevent interfering with test runners or
-        embedding hosts that manage their own shutdown sequence.
-        """
         try:
             _logger.info(f"Received signal {signum}, cleaning up renderers")
         except Exception:
@@ -1286,19 +1124,6 @@ def _warn_about_limitations(
     requested_mode: Optional[str] = None,
     include_recommendations: bool = True,
 ) -> None:
-    """
-    Internal function to issue appropriate warnings about system limitations,
-    missing dependencies, performance constraints, and platform-specific rendering
-    capabilities for user awareness and troubleshooting guidance.
-
-    Args:
-        capabilities: System capability assessment from detect_rendering_capabilities
-        requested_mode: Optional specific rendering mode being requested
-        include_recommendations: Whether to include configuration recommendations
-
-    Returns:
-        None: Issues warnings and logs system limitations with guidance
-    """
     _warn_numpy_missing(capabilities)
     _warn_matplotlib_backends(capabilities)
     _log_headless_info_if_needed(capabilities)
@@ -1336,7 +1161,6 @@ _logger.info(
     f"Memory threshold={_MEMORY_WARNING_THRESHOLD_MB}MB"
 )
 
-# Comprehensive public interface exports for rendering pipeline
 __all__ = [
     # Core renderer classes and interfaces
     "BaseRenderer",  # Abstract base renderer defining consistent interface
@@ -1346,6 +1170,7 @@ __all__ = [
     "NumpyRGBRenderer",  # High-performance RGB array renderer with optimization
     "MatplotlibRenderer",  # Interactive matplotlib renderer for human mode
     "MatplotlibBackendManager",  # Backend management for cross-platform compatibility
+    "RendererAdapter",  # Minimal adapter exposing mode support checks
     # Color scheme management system
     "ColorSchemeManager",  # Central color scheme management with caching
     "CustomColorScheme",  # Custom color scheme configuration with validation
@@ -1359,7 +1184,7 @@ __all__ = [
     "create_color_scheme",  # Factory for custom color schemes with validation
     "get_default_scheme",  # Factory for default color scheme with standard colors
     # Validation and utility functions
-    "validate_renderer_config",  # Comprehensive renderer configuration validation
+    "validate_renderer_config",
     "validate_rendering_parameters",  # Rendering parameter validation with error reporting
     "validate_rgb_array_output",  # RGB array quality assurance and format compliance
     # System capability detection

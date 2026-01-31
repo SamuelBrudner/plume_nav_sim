@@ -11,10 +11,11 @@ from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+CHUNKS_TYX: Tuple[int, int, int] = (8, 64, 64)
 
 def _try_import_imageio_v3():
     try:
-        import imageio.v3 as iio  # type: ignore
+        import imageio.v3 as iio
 
         return iio
     except Exception as e:  # pragma: no cover - exercised in media-optional envs
@@ -25,13 +26,47 @@ def _try_import_imageio_v3():
 
 def _try_import_zarr():
     try:
-        import zarr  # type: ignore
+        import zarr
 
         return zarr
     except Exception as e:  # pragma: no cover - exercised in media-optional envs
         raise ImportError(
             "zarr is required for video ingest. Install with 'pip install zarr numcodecs'."
         ) from e
+
+
+def _create_zarr_array(
+    _zarr,
+    store_path: Path,
+    *,
+    name: str,
+    shape: Tuple[int, int, int],
+    dtype: str,
+    chunks: Tuple[int, int, int],
+    overwrite: bool,
+    extra_attrs: Optional[dict],
+):
+    compressor = None
+    try:
+        from numcodecs import Blosc
+
+        compressor = Blosc(cname="zstd", clevel=3, shuffle=1)
+    except Exception:
+        compressor = None
+
+    grp = _zarr.open_group(store_path, mode="a")
+    if overwrite and name in grp:
+        del grp[name]
+    arr = grp.require_dataset(
+        name,
+        shape=shape,
+        dtype=dtype,
+        chunks=chunks,
+        compressor=compressor,
+    )
+    if extra_attrs:
+        arr.attrs.update(extra_attrs)
+    return arr
 
 
 def _git_sha() -> Optional[str]:
@@ -106,12 +141,6 @@ def _iter_frames(iio, input_path: Path) -> Iterator[np.ndarray]:
 def _stack_to_concentration(
     frames: Iterable[np.ndarray], *, normalize: bool
 ) -> Tuple[np.ndarray, str]:
-    """Convert input frames to a (T,Y,X) float32 concentration array.
-
-    Returns (data, source_dtype_str).
-    - Accepts grayscale (H,W) or RGB (H,W,3) inputs; RGB is converted to luma.
-    - When normalize=True, output is in [0,1] float32; else float32 preserving range.
-    """
     frames_list: List[np.ndarray] = []
     src_dtype: Optional[np.dtype] = None
     for f in frames:
@@ -178,11 +207,10 @@ def ingest_video(cfg: IngestConfig) -> Path:
     """Run ingest: read frames, write Zarr store with attrs and manifest."""
     # Deferred imports to enable clean skips
     iio = _try_import_imageio_v3()
-    _ = _try_import_zarr()
+    _zarr = _try_import_zarr()
 
     # Contracts and helpers
     from plume_nav_sim.media import build_provenance_manifest, write_manifest
-    from plume_nav_sim.storage import CHUNKS_TYX, create_zarr_array
     from plume_nav_sim.video.schema import (
         DIMS_TYX,
         VARIABLE_NAME,
@@ -211,7 +239,8 @@ def ingest_video(cfg: IngestConfig) -> Path:
     out = cfg.output
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    arr = create_zarr_array(
+    arr = _create_zarr_array(
+        _zarr,
         out,
         name=VARIABLE_NAME,
         shape=(t, y, x),
@@ -224,8 +253,6 @@ def ingest_video(cfg: IngestConfig) -> Path:
     arr[:] = data  # small inputs; for very large, loop over t
 
     # Write group/global attrs
-    import zarr as _zarr  # type: ignore
-
     grp = _zarr.open_group(out, mode="a")
     for k, v in valid.model_dump().items():
         grp.attrs[k] = v
@@ -306,12 +333,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """Entry point for the video ingest CLI.
-
-    Returns 0 on success, non-zero on failure. When required media dependencies
-    are missing, prints an informational message and exits 0 to allow CI to
-    proceed when media stack is optional.
-    """
     args = build_arg_parser().parse_args(argv)
     logger = _setup_logger(args.log_level)
 

@@ -1,17 +1,3 @@
-"""
-Pydantic configuration models for environment components.
-
-This module defines validated configuration classes for all pluggable
-components (actions, observations, rewards) with automatic type checking
-and validation.
-
-Example:
-    >>> from plume_nav_sim.config import ActionConfig, create_environment_from_config
-    >>>
-    >>> action_cfg = ActionConfig(type="discrete", step_size=2)
-    >>> env = create_environment_from_config(action=action_cfg, ...)
-"""
-
 from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -21,59 +7,32 @@ __all__ = [
     "ObservationConfig",
     "RewardConfig",
     "PlumeConfig",
+    "WindConfig",
     "EnvironmentConfig",
 ]
 
 
 class ActionConfig(BaseModel):
-    """Configuration for action processors.
-
-    Attributes:
-        type: Action processor type ('discrete' or 'oriented')
-        step_size: Movement step size in grid cells (default: 1)
-        parameters: Additional processor-specific parameters
-
-    Example:
-        >>> config = ActionConfig(type="discrete", step_size=2)
-        >>> config = ActionConfig(type="oriented", step_size=1)
-    """
-
-    type: Literal["discrete", "oriented"] = Field(
+    type: Literal["discrete", "oriented", "run_tumble"] = Field(
         default="discrete",
-        description="Action processor type: 'discrete' (4-dir) or 'oriented' (3-action)",
+        description=(
+            "Action processor type: 'discrete' (4-dir), 'oriented' (3-action), "
+            "or 'run_tumble' (2-action)."
+        ),
     )
     step_size: int = Field(
         default=1, ge=1, description="Movement step size in grid cells"
     )
-    parameters: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional processor-specific parameters"
-    )
-
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
 class ObservationConfig(BaseModel):
-    """Configuration for observation models.
-
-    Attributes:
-        type: Observation model type ('concentration' or 'antennae')
-        n_sensors: Number of sensors (for 'antennae' type)
-        sensor_distance: Distance from agent to sensors (for 'antennae')
-        sensor_angles: Custom sensor angles (optional, for 'antennae')
-        parameters: Additional model-specific parameters
-
-    Example:
-        >>> config = ObservationConfig(type="concentration")
-        >>> config = ObservationConfig(
-        ...     type="antennae",
-        ...     n_sensors=4,
-        ...     sensor_distance=2.0
-        ... )
-    """
-
-    type: Literal["concentration", "antennae"] = Field(
+    type: Literal["concentration", "antennae", "wind_vector"] = Field(
         default="concentration",
-        description="Observation model type: 'concentration' (single) or 'antennae' (array)",
+        description=(
+            "Observation model type: 'concentration' (single), 'antennae' (array), "
+            "or 'wind_vector' (mechanosensory wind)"
+        ),
     )
     n_sensors: int = Field(
         default=2, ge=1, description="Number of sensors (for antennae array)"
@@ -84,8 +43,10 @@ class ObservationConfig(BaseModel):
     sensor_angles: Optional[list[float]] = Field(
         default=None, description="Custom sensor angles in degrees (optional)"
     )
-    parameters: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional model-specific parameters"
+    noise_std: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Gaussian noise stddev for wind_vector observations",
     )
 
     @field_validator("sensor_angles")
@@ -103,26 +64,35 @@ class ObservationConfig(BaseModel):
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
+class WindConfig(BaseModel):
+    type: Literal["constant"] = Field(
+        default="constant", description="Wind model type (constant vector)"
+    )
+    direction_deg: float = Field(
+        default=0.0, description="Wind direction in degrees (0°=East, 90°=North)"
+    )
+    speed: float = Field(
+        default=1.0,
+        ge=0.0,
+        description="Wind speed magnitude; ignored if vector provided",
+    )
+    vector: Optional[tuple[float, float]] = Field(
+        default=None, description="Optional explicit wind vector (vx, vy)"
+    )
+
+    @field_validator("vector")
+    @classmethod
+    def validate_vector(cls, v):
+        if v is None:
+            return v
+        if len(v) != 2:
+            raise ValueError("vector must have length 2 (vx, vy)")
+        return v
+
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
+
+
 class RewardConfig(BaseModel):
-    """Configuration for reward functions.
-
-    Attributes:
-        type: Reward function type ('sparse' or 'dense')
-        goal_radius: Success threshold distance from goal
-        max_distance: Maximum distance for normalization (dense reward)
-        distance_weight: Weight for distance term (dense reward)
-        concentration_weight: Weight for concentration term (dense reward)
-        parameters: Additional function-specific parameters
-
-    Example:
-        >>> config = RewardConfig(type="sparse", goal_radius=5.0)
-        >>> config = RewardConfig(
-        ...     type="dense",
-        ...     goal_radius=5.0,
-        ...     distance_weight=0.1
-        ... )
-    """
-
     type: Literal["sparse", "step_penalty"] = Field(
         default="sparse",
         description="Reward function type: 'sparse' (binary) or 'step_penalty' (time-aware)",
@@ -130,36 +100,20 @@ class RewardConfig(BaseModel):
     goal_radius: float = Field(
         default=5.0, gt=0.0, description="Success threshold distance from goal"
     )
-    max_distance: Optional[float] = Field(
-        default=None,
-        description="Maximum distance for normalization (dense reward only)",
+    goal_reward: float = Field(
+        default=1.0,
+        description="Reward granted upon reaching the goal (step_penalty reward)",
     )
-    distance_weight: float = Field(
-        default=0.1, description="Weight for distance term (dense reward)"
-    )
-    concentration_weight: float = Field(
-        default=0.1, description="Weight for concentration term (dense reward)"
-    )
-    parameters: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional function-specific parameters"
+    step_penalty: float = Field(
+        default=0.01,
+        ge=0.0,
+        description="Penalty applied each step until goal (step_penalty reward)",
     )
 
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
 class PlumeConfig(BaseModel):
-    """Configuration for plume/concentration field.
-
-    Attributes:
-        sigma: Gaussian dispersion parameter (standard deviation)
-        normalize: Whether to normalize field values to [0, 1]
-        enable_caching: Whether to enable field value caching
-        parameters: Additional plume-specific parameters
-
-    Example:
-        >>> config = PlumeConfig(sigma=20.0, normalize=True)
-    """
-
     sigma: float = Field(
         default=20.0, gt=0.0, description="Gaussian dispersion parameter (std dev)"
     )
@@ -170,40 +124,23 @@ class PlumeConfig(BaseModel):
         default=True, description="Enable concentration field caching"
     )
     parameters: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional plume-specific parameters"
+        default_factory=dict,
+        description="Deprecated; no custom plume parameters are currently supported",
     )
+
+    @field_validator("parameters")
+    @classmethod
+    def _reject_plume_parameters(cls, v):
+        if v:
+            raise ValueError(
+                "PlumeConfig.parameters is deprecated; no parameters are used"
+            )
+        return v
 
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
 class EnvironmentConfig(BaseModel):
-    """Complete environment configuration.
-
-    This is the master config that combines all component configs
-    plus environment-specific settings.
-
-    Attributes:
-        grid_size: Environment dimensions (width, height)
-        goal_location: Target position (x, y)
-        start_location: Initial agent position (x, y), optional
-        max_steps: Episode step limit
-        render_mode: Rendering mode ('rgb_array', 'human', or None)
-        action: Action processor configuration
-        observation: Observation model configuration
-        reward: Reward function configuration
-        plume: Plume field configuration
-
-    Example:
-        >>> config = EnvironmentConfig(
-        ...     grid_size=(128, 128),
-        ...     goal_location=(64, 64),
-        ...     max_steps=1000,
-        ...     action=ActionConfig(type="discrete"),
-        ...     observation=ObservationConfig(type="concentration"),
-        ...     reward=RewardConfig(type="sparse")
-        ... )
-    """
-
     # Environment settings
     grid_size: tuple[int, int] = Field(
         default=(128, 128), description="Environment dimensions (width, height)"
@@ -231,6 +168,9 @@ class EnvironmentConfig(BaseModel):
     )
     plume: PlumeConfig = Field(
         default_factory=PlumeConfig, description="Plume field configuration"
+    )
+    wind: Optional[WindConfig] = Field(
+        default=None, description="Wind model configuration (None disables wind)"
     )
 
     @field_validator("grid_size")
@@ -266,6 +206,7 @@ class EnvironmentConfig(BaseModel):
                 "observation": {"type": "concentration"},
                 "reward": {"type": "sparse", "goal_radius": 5.0},
                 "plume": {"sigma": 20.0, "normalize": True},
+                "wind": {"type": "constant", "direction_deg": 0.0, "speed": 1.0},
             }
         },
     )

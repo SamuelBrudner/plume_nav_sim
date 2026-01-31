@@ -14,10 +14,10 @@ and EpisodeResult contains: seed, steps, total_reward, terminated, truncated, me
 
 from __future__ import annotations
 
-from typing import Iterator, Optional
+from typing import Iterator
 
+import gymnasium as gym
 import numpy as np
-import pytest
 
 import plume_nav_sim as pns
 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
@@ -161,3 +161,83 @@ def test_deterministic_sequence_across_instances():
     seq2 = [(ev.action, ev.reward) for ev in r.stream(env2, p2, seed=seed)]
 
     assert seq1 == seq2
+
+
+def test_runner_supports_dict_observations_with_adapter():
+    """Dict/Tuple observations propagate through events and can be adapted for policies."""
+    from plume_nav_sim.runner import runner as r
+
+    class DictObsEnv:
+        def __init__(self):
+            self.action_space = gym.spaces.Discrete(3)
+            self.observation_space = gym.spaces.Dict(
+                {
+                    "vec": gym.spaces.Box(
+                        low=0.0, high=10.0, shape=(2,), dtype=np.float32
+                    ),
+                    "flag": gym.spaces.Discrete(2),
+                }
+            )
+            self._step = 0
+
+        def reset(self, seed=None):
+            self._step = 0
+            return {"vec": np.array([1.0, 2.0], dtype=np.float32), "flag": 1}, {}
+
+        def step(self, action):
+            self._step += 1
+            obs = {
+                "vec": np.array([float(self._step), float(action)], dtype=np.float32),
+                "flag": int(action % 2),
+            }
+            reward = float(action)
+            terminated = self._step >= 2
+            truncated = False
+            info = {"step": self._step}
+            return obs, reward, terminated, truncated, info
+
+    class ArrayPolicy:
+        def __init__(self):
+            self.action_space = gym.spaces.Discrete(2)
+            self.reset_calls = 0
+            self.received = []
+
+        def reset(self, *, seed=None):
+            self.reset_calls += 1
+
+        def select_action(self, observation, *, explore=True):
+            assert isinstance(observation, np.ndarray)
+            self.received.append(observation)
+            return int(observation[0] % 2)
+
+    def policy_obs_adapter(obs):
+        return np.array([obs["flag"], obs["vec"][0]], dtype=np.float32)
+
+    env = DictObsEnv()
+    policy = ArrayPolicy()
+    events: list = []
+
+    result = r.run_episode(
+        env,
+        policy,
+        seed=5,
+        max_steps=5,
+        on_step=events.append,
+        policy_obs_adapter=policy_obs_adapter,
+    )
+
+    assert events, "runner should emit StepEvents for dict observations"
+    assert len(events) == result.steps
+    assert policy.reset_calls == 1
+    assert policy.received, "adapter should forward observations to policy"
+
+    first = events[0]
+    assert isinstance(first.obs, dict)
+    np.testing.assert_array_equal(
+        first.obs["vec"], np.array([1.0, 2.0], dtype=np.float32)
+    )
+    assert first.obs["flag"] == 1
+    np.testing.assert_array_equal(
+        policy.received[0], np.array([1.0, 1.0], dtype=np.float32)
+    )
+    assert isinstance(result.terminated, bool) and isinstance(result.truncated, bool)

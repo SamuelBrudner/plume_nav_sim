@@ -16,6 +16,7 @@ for continuous validation and performance tracking.
 
 import argparse  # >=3.10 - Command-line argument parsing for test execution options
 import json  # >=3.10 - JSON serialization for test results and configuration data
+import logging  # >=3.10 - Logging utilities for local logger helpers
 import multiprocessing  # >=3.10 - Parallel test execution support and process management
 import os  # >=3.10 - Operating system interface for environment variables and paths
 import pathlib  # >=3.10 - Object-oriented file system path handling
@@ -33,6 +34,7 @@ from typing import (  # >=3.10 - Type hints for comprehensive annotation
 )
 
 from plume_nav_sim.__init__ import get_package_info, initialize_package
+from plume_nav_sim._compat import ConfigurationError, ValidationError
 from plume_nav_sim.config import (
     TestConfigFactory,
     create_edge_case_test_config,
@@ -41,16 +43,7 @@ from plume_nav_sim.config import (
     create_reproducibility_test_config,
     create_unit_test_config,
 )
-from plume_nav_sim.utils.exceptions import ConfigurationError, ValidationError
-
-# Internal imports
-from plume_nav_sim.utils.logging import (
-    ComponentLogger,
-    PerformanceTimer,
-    configure_logging_for_development,
-    get_component_logger,
-)
-from plume_nav_sim.utils.validation import ValidationResult, create_validation_context
+from plume_nav_sim.logging import configure_development_logging
 
 # External imports with version comments
 
@@ -96,6 +89,72 @@ SUPPORTED_PYTHON_VERSIONS = ["3.10", "3.11", "3.12", "3.13"]
 EXIT_CODE_SUCCESS = 0
 EXIT_CODE_FAILURE = 1
 EXIT_CODE_ERROR = 2
+
+
+class PerformanceTimer:
+    def __init__(self) -> None:
+        self._start = 0.0
+        self._end = 0.0
+
+    def __enter__(self) -> "PerformanceTimer":
+        self._start = time.perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self._end = time.perf_counter()
+
+    def get_duration_ms(self) -> float:
+        end = self._end or time.perf_counter()
+        return (end - self._start) * 1000.0
+
+
+def get_component_logger(name: str) -> logging.Logger:
+    logger = logging.getLogger(name)
+    if not hasattr(logger, "performance"):
+        setattr(logger, "performance", logger.info)
+    return logger
+
+
+@dataclass
+class ValidationResult:
+    is_valid: bool
+    errors: List[str]
+    warnings: List[str]
+    recommendations: List[str]
+
+    def add_recommendation(self, message: str) -> None:
+        self.recommendations.append(message)
+
+
+class ValidationContext:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.errors: List[str] = []
+        self.warnings: List[str] = []
+
+    def add_error(self, message: str) -> None:
+        self.errors.append(message)
+
+    def add_errors(self, messages: List[str]) -> None:
+        self.errors.extend(messages)
+
+    def add_warning(self, message: str) -> None:
+        self.warnings.append(message)
+
+    def add_warnings(self, messages: List[str]) -> None:
+        self.warnings.extend(messages)
+
+    def get_result(self) -> ValidationResult:
+        return ValidationResult(
+            is_valid=not self.errors,
+            errors=list(self.errors),
+            warnings=list(self.warnings),
+            recommendations=[],
+        )
+
+
+def create_validation_context(name: str) -> ValidationContext:
+    return ValidationContext(name)
 
 
 @dataclass
@@ -474,7 +533,7 @@ class TestRunner:
     """
 
     def __init__(
-        self, config: TestExecutionConfig, logger: Optional[ComponentLogger] = None
+        self, config: TestExecutionConfig, logger: Optional[logging.Logger] = None
     ):
         """
         Initialize TestRunner with execution configuration, logging, and system capability
@@ -1076,9 +1135,9 @@ def setup_test_environment(
                 setup_result["warnings"].extend(cleanup_result.get("warnings", []))
 
         # Initialize comprehensive logging configuration
-        configure_logging_for_development(
-            log_level=config.log_level or "INFO",
-            log_file=str(logs_dir / "test_execution.log"),
+        configure_development_logging(
+            development_log_level=config.log_level or "INFO",
+            log_to_file=True,
         )
         logger.info("Configured logging for test execution")
 
@@ -1329,7 +1388,7 @@ def validate_test_configuration(
                 try:
                     # Validate category-specific configuration can be created
                     factory = TestConfigFactory()
-                    category_config = factory.create_for_test_type(category)
+                    factory.create_for_test_type(category)
                     logger.debug(f"Validated configuration for {category} tests")
                 except Exception as e:
                     context.add_error(
@@ -1355,9 +1414,10 @@ def validate_test_configuration(
 
             # Required package availability
             try:
-                import matplotlib
-                import numpy
-                import pytest
+                import importlib
+
+                for module in ("matplotlib", "numpy", "pytest"):
+                    importlib.import_module(module)
 
                 logger.debug("Core dependencies validated")
             except ImportError as e:
@@ -1594,8 +1654,7 @@ def get_system_info(
 
                 # Memory allocation timing
                 with PerformanceTimer() as timer:
-                    large_array = np.zeros((1000, 1000), dtype=np.float32)
-                    del large_array
+                    np.zeros((1000, 1000), dtype=np.float32)
 
                 baseline_info["timing_tests"][
                     "memory_allocation_ms"
@@ -2172,7 +2231,7 @@ def main(args: Optional[List[str]] = None) -> int:
 
     try:
         # Initialize logging configuration
-        configure_logging_for_development(log_level=log_level)
+        configure_development_logging(development_log_level=log_level)
         logger = get_component_logger("main")
 
         logger.info(f"Starting {SCRIPT_NAME} v{SCRIPT_VERSION}")
@@ -2403,8 +2462,6 @@ def main(args: Optional[List[str]] = None) -> int:
 __all__ = [
     # Main entry points
     "main",
-    "run_test_suite",
-    "execute_test_category",
     "generate_test_report",
     # Core classes
     "TestRunner",

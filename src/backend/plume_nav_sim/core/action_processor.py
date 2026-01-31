@@ -1,52 +1,30 @@
-"""
-Core action processing module for plume_nav_sim providing comprehensive action validation,
-movement calculation, boundary-aware action processing, and coordinate system integration
-for the Gymnasium-compatible reinforcement learning environment with performance optimization,
-error handling, and state transition management.
+import dataclasses
+import functools
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
-This module implements:
-- ActionProcessor: Primary action processing class with comprehensive validation and boundary enforcement
-- ActionProcessingResult: Detailed results with movement outcome and performance metrics
-- ActionProcessingConfig: Configuration for processor behavior and performance tuning
-- Standalone utility functions for performance-critical scenarios
-- Caching and performance monitoring for <0.1ms action processing targets
-- Integration with boundary enforcement and coordinate system validation
-"""
-
-import dataclasses  # >=3.10
-import functools  # standard library
-import time  # standard library
-from typing import Any, Dict, List, Optional, Tuple  # >=3.10
-
-import numpy as np  # >=2.1.0
+import numpy as np
 
 # Exception handling system for error reporting and recovery
-from ..utils.exceptions import ComponentError, StateError, ValidationError
+from .._compat import ComponentError, StateError, ValidationError
 
 # Logging and performance monitoring utilities
-from ..utils.logging import ComponentType, get_component_logger, monitor_performance
+from ..logging import ComponentType, get_component_logger
 
 # Boundary enforcement integration for movement validation
 from .boundary_enforcer import BoundaryEnforcer
 
 # System constants for action processing and performance targets
 from .constants import ACTION_SPACE_SIZE, MOVEMENT_VECTORS
-
-# Internal imports for core data structures and type system
 from .enums import Action
 from .geometry import Coordinates, GridSize
 from .types import ActionType, MovementVector
 
-# Validation utilities for comprehensive parameter checking
-
-
-# Global configuration constants for action processing optimization
 ACTION_PROCESSING_PERFORMANCE_TARGET_MS = 0.1
 ACTION_VALIDATION_CACHE_SIZE = 100
 DEFAULT_ENABLE_BOUNDARY_ENFORCEMENT = True
 MOVEMENT_CALCULATION_PRECISION = 1e-10
 
-# Module exports for public API
 __all__ = [
     "ActionProcessor",
     "ActionProcessingResult",
@@ -60,23 +38,6 @@ __all__ = [
 
 @dataclasses.dataclass(frozen=True)
 class ActionProcessingResult:
-    """
-    Comprehensive data class for action processing results containing movement outcome,
-    boundary enforcement details, performance metrics, and validation status for detailed
-    analysis and environment integration.
-
-    Attributes:
-        action: The processed action (Action enum or integer)
-        original_position: Agent position before processing
-        final_position: Agent position after processing and boundary enforcement
-        action_valid: Whether the action was valid according to validation rules
-        position_changed: Whether the agent position was modified during processing
-        boundary_hit: Whether boundary constraints affected the movement
-        movement_delta: The coordinate delta vector (dx, dy) applied
-        processing_time_ms: Time taken to process the action in milliseconds
-        validation_error: Optional validation error message if action was invalid
-    """
-
     # Required parameters for action processing result creation
     action: ActionType
     original_position: Coordinates
@@ -98,21 +59,9 @@ class ActionProcessingResult:
         )
 
     def was_movement_successful(self) -> bool:
-        """
-        Determine if movement was successful based on action validity and position change.
-
-        Returns:
-            True if action was valid and resulted in successful movement
-        """
         return self.action_valid and self.position_changed
 
     def get_movement_summary(self) -> Dict[str, Any]:
-        """
-        Generate comprehensive movement summary for analysis and debugging.
-
-        Returns:
-            Dictionary containing movement details, boundary status, and performance metrics
-        """
         return {
             "action": (
                 int(self.action) if isinstance(self.action, Action) else self.action
@@ -132,15 +81,6 @@ class ActionProcessingResult:
         }
 
     def to_dict(self, include_performance_data: bool = True) -> Dict[str, Any]:
-        """
-        Convert action processing result to dictionary for serialization and external analysis.
-
-        Args:
-            include_performance_data: Whether to include timing and performance metrics
-
-        Returns:
-            Dictionary representation of action processing result
-        """
         result = {
             "action": (
                 int(self.action) if isinstance(self.action, Action) else self.action
@@ -164,20 +104,6 @@ class ActionProcessingResult:
 
 @dataclasses.dataclass
 class ActionProcessingConfig:
-    """
-    Configuration data class for action processor behavior including validation settings,
-    boundary enforcement policies, performance monitoring, and error handling options.
-
-    Attributes:
-        enable_validation: Enable comprehensive action validation
-        enforce_boundaries: Enable boundary constraint enforcement during movement
-        enable_performance_monitoring: Enable timing and performance tracking
-        strict_validation: Enable strict validation with comprehensive checking
-        cache_validation_results: Enable caching of validation results for performance
-        performance_target_ms: Target processing time in milliseconds
-        log_action_processing: Enable detailed logging of action processing operations
-    """
-
     # Required configuration parameters
     enable_validation: bool = True
     enforce_boundaries: bool = DEFAULT_ENABLE_BOUNDARY_ENFORCEMENT
@@ -190,15 +116,6 @@ class ActionProcessingConfig:
     log_action_processing: bool = False
 
     def validate_configuration(self) -> bool:
-        """
-        Validate action processing configuration for consistency and feasibility.
-
-        Returns:
-            True if configuration is valid
-
-        Raises:
-            ValidationError: If configuration is invalid or inconsistent
-        """
         # Validate performance_target_ms is positive value
         if self.performance_target_ms <= 0:
             raise ValidationError(
@@ -225,15 +142,6 @@ class ActionProcessingConfig:
     def clone(
         self, overrides: Optional[Dict[str, Any]] = None
     ) -> "ActionProcessingConfig":
-        """
-        Create deep copy of action processing configuration with optional parameter overrides.
-
-        Args:
-            overrides: Optional dictionary of parameters to override
-
-        Returns:
-            New configuration instance with optional modifications
-        """
         # Create copy of current configuration parameters
         config_data = dataclasses.asdict(self)
 
@@ -252,38 +160,12 @@ class ActionProcessingConfig:
 
 
 class ActionProcessor:
-    """
-    Primary action processing class providing comprehensive action validation, movement
-    calculation, boundary enforcement integration, and performance monitoring for Gymnasium
-    environment step operations with caching and error handling.
-
-    This class serves as the central component for processing agent actions with:
-    - Comprehensive action validation with customizable strictness
-    - Movement calculation with high-precision coordinate arithmetic
-    - Boundary enforcement integration for grid constraint compliance
-    - Performance monitoring with sub-millisecond timing targets
-    - Caching for validation results and movement calculations
-    - Extensive error handling with recovery suggestions
-    """
-
     def __init__(
         self,
         grid_size: GridSize,
         config: Optional[ActionProcessingConfig] = None,
         boundary_enforcer: Optional[BoundaryEnforcer] = None,
     ):
-        """
-        Initialize action processor with grid size, configuration, and optional boundary enforcer.
-
-        Args:
-            grid_size: Grid dimensions for boundary validation and movement calculations
-            config: Action processing configuration, defaults to standard settings
-            boundary_enforcer: Optional boundary enforcer, created if None and boundaries enabled
-
-        Raises:
-            ValidationError: If grid_size is invalid or configuration is inconsistent
-            ComponentError: If initialization fails
-        """
         try:
             # Validate and store grid_size for boundary constraint validation
             if not isinstance(grid_size, GridSize):
@@ -308,7 +190,7 @@ class ActionProcessor:
 
             # Initialize component logger for action processing operations
             self.logger = get_component_logger(
-                component_name="action_processor",
+                "action_processor",
                 component_type=ComponentType.UTILS,
                 enable_performance_tracking=self.config.enable_performance_monitoring,
             )
@@ -348,27 +230,9 @@ class ActionProcessor:
                 underlying_error=e,
             ) from e
 
-    @monitor_performance(
-        "action_processing", ACTION_PROCESSING_PERFORMANCE_TARGET_MS, True
-    )
     def process_action(  # noqa
         self, action: ActionType, current_position: Coordinates
     ) -> ActionProcessingResult:
-        """
-        Primary action processing method with comprehensive validation, movement calculation,
-        boundary enforcement, and performance monitoring for environment step integration.
-
-        Args:
-            action: Action to process (Action enum or integer 0-3)
-            current_position: Current agent position for movement calculation
-
-        Returns:
-            Comprehensive action processing result with movement outcome and analysis
-
-        Raises:
-            ValidationError: If action or position parameters are invalid
-            StateError: If action processing fails due to invalid state
-        """
         start_time = time.perf_counter()
         validation_error_msg = None
 
@@ -422,7 +286,6 @@ class ActionProcessor:
             # Calculate processing time
             processing_time = (time.perf_counter() - start_time) * 1000.0
 
-            # Create comprehensive ActionProcessingResult
             result = ActionProcessingResult(
                 action=action,
                 original_position=current_position,
@@ -492,24 +355,9 @@ class ActionProcessor:
     def validate_action(
         self, action: ActionType, raise_on_invalid: bool = True
     ) -> bool:
-        """
-        Comprehensive action validation with type checking, bounds validation, and Action
-        enum compatibility for runtime action processing.
-
-        Args:
-            action: Action to validate (Action enum or integer)
-            raise_on_invalid: Whether to raise exception if action is invalid
-
-        Returns:
-            True if action is valid, False if invalid (when raise_on_invalid=False)
-
-        Raises:
-            ValidationError: If action is invalid and raise_on_invalid=True
-        """
         try:
             # Use validate_action_parameter (context not needed here)
 
-            # Perform comprehensive validation using local bounds helper
             is_valid = validate_action_bounds(
                 action, strict_validation=self.config.strict_validation
             )
@@ -536,16 +384,6 @@ class ActionProcessor:
             return False
 
     def get_valid_actions(self, current_position: Coordinates) -> List[Action]:  # noqa
-        """
-        Analyze current position to determine which actions would result in valid movements
-        within grid boundaries for action space filtering.
-
-        Args:
-            current_position: Current agent position for movement analysis
-
-        Returns:
-            List of valid Action enum values that would not violate boundary constraints
-        """
         valid_actions = []
 
         try:
@@ -590,18 +428,6 @@ class ActionProcessor:
         current_position: Coordinates,
         apply_boundary_enforcement: bool = True,
     ) -> Tuple[Coordinates, MovementVector, bool, bool]:
-        """
-        Calculate comprehensive movement outcome including final position, boundary effects,
-        and movement analysis for detailed action processing.
-
-        Args:
-            action: Action to process for movement calculation
-            current_position: Starting position for movement
-            apply_boundary_enforcement: Whether to apply boundary constraints
-
-        Returns:
-            Tuple of (final_position, movement_delta, boundary_hit, position_changed)
-        """
         try:
             # Calculate movement delta
             movement_delta = calculate_movement_delta(action, validate_action=False)
@@ -644,17 +470,6 @@ class ActionProcessor:
         include_cache_analysis: bool = True,
         include_performance_trends: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Get comprehensive action processing statistics including performance metrics,
-        cache efficiency, and error analysis for monitoring.
-
-        Args:
-            include_cache_analysis: Whether to include cache hit/miss statistics
-            include_performance_trends: Whether to include performance trend analysis
-
-        Returns:
-            Processing statistics with performance analysis, cache metrics, and error rates
-        """
         try:
             # Calculate basic statistics
             success_rate = (self.actions_processed - self.validation_errors) / max(
@@ -713,12 +528,6 @@ class ActionProcessor:
             return {"error": str(e), "actions_processed": self.actions_processed}
 
     def clear_cache(self) -> Dict[str, Any]:
-        """
-        Clear validation cache and reset performance statistics for memory management and testing.
-
-        Returns:
-            Cache clearing report with statistics and memory usage analysis
-        """
         try:
             # Calculate current cache size
             initial_cache_size = (
@@ -769,15 +578,6 @@ class ActionProcessor:
             return {"cache_cleared": False, "error": str(e)}
 
     def update_configuration(self, new_config: ActionProcessingConfig) -> None:
-        """
-        Update action processor configuration and apply changes to processing behavior.
-
-        Args:
-            new_config: New configuration to apply
-
-        Raises:
-            ValidationError: If new configuration is invalid
-        """
         try:
             # Validate new configuration
             new_config.validate_configuration()
@@ -829,24 +629,6 @@ def process_action(
     enforce_boundaries: bool = True,
     validate_action: bool = True,
 ) -> Tuple[Coordinates, bool, bool]:
-    """
-    Standalone action processing function for performance-critical scenarios requiring
-    minimal overhead with comprehensive validation, movement calculation, and boundary
-    enforcement integration.
-
-    Args:
-        action: Action to process (Action enum or integer)
-        current_position: Current agent position
-        grid_bounds: Grid size for boundary validation
-        enforce_boundaries: Whether to enforce grid boundaries
-        validate_action: Whether to validate action parameter
-
-    Returns:
-        Tuple of (final_position, action_valid, boundary_hit) with comprehensive movement analysis
-
-    Raises:
-        ValidationError: If critical parameters are invalid
-    """
     try:
         # Validate action if requested
         action_valid = True
@@ -879,17 +661,6 @@ def process_action(
 
 
 def validate_action_bounds(action: ActionType, strict_validation: bool = False) -> bool:
-    """
-    Fast action bounds validation for discrete action space compliance ensuring action
-    is within cardinal direction range with performance optimization.
-
-    Args:
-        action: Action to validate
-        strict_validation: Whether to apply strict type checking
-
-    Returns:
-        True if action is within bounds [0, 3] for cardinal directions, False otherwise
-    """
     try:
         # Handle Action enum
         if isinstance(action, Action):
@@ -915,20 +686,6 @@ def validate_action_bounds(action: ActionType, strict_validation: bool = False) 
 def calculate_movement_delta(
     action: ActionType, validate_action: bool = False
 ) -> MovementVector:
-    """
-    Calculate coordinate delta vector from action for movement calculations with
-    mathematical precision and error handling.
-
-    Args:
-        action: Action for movement calculation
-        validate_action: Whether to validate action parameter
-
-    Returns:
-        Movement delta tuple (dx, dy) for coordinate arithmetic and position updates
-
-    Raises:
-        ValidationError: If action is invalid and validation is enabled
-    """
     try:
         # Validate action if requested
         if validate_action and not validate_action_bounds(action):
@@ -951,18 +708,6 @@ def calculate_movement_delta(
 def is_valid_action_for_position(
     action: ActionType, current_position: Coordinates, grid_bounds: GridSize
 ) -> bool:
-    """
-    Check if action would result in valid movement from current position considering
-    boundary constraints and grid limitations.
-
-    Args:
-        action: Action to check for validity
-        current_position: Current agent position
-        grid_bounds: Grid boundaries for validation
-
-    Returns:
-        True if action would result in valid movement within grid bounds, False otherwise
-    """
     try:
         # Validate action bounds first
         if not validate_action_bounds(action):

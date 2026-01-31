@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-
 from plume_nav_debugger.odc.models import ActionInfo, ObservationInfo, PipelineInfo
 from plume_nav_debugger.odc.provider import DebuggerProvider
 
@@ -21,7 +20,8 @@ class ExampleDebuggerProvider(DebuggerProvider):
 
     def policy_distribution(self, policy: Any, observation: Any):
         # Demo-only: peaked distribution on action 0
-        n = getattr(getattr(env := policy, "action_space", None), "n", 3)  # type: ignore
+        action_space = getattr(policy, "action_space", None)
+        n = getattr(action_space, "n", 3)
         if not isinstance(n, (int, np.integer)):
             n = 3
         probs = np.zeros(int(n), dtype=float)

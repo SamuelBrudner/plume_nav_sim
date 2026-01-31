@@ -5,7 +5,6 @@ from typing import Any, List, Optional
 
 import numpy as np
 
-from ..inspector.introspection import get_env_chain_names
 from ..inspector.models import _softmax  # reuse stable softmax impl
 from .discovery import find_provider
 from .models import ActionInfo, ObservationInfo, PipelineInfo
@@ -42,6 +41,7 @@ class ProviderMux:
         self._pipeline: Optional[List[str]] = None
         self._obs_kind_cache: Optional[str] = None
         self._obs_label_cache: Optional[str] = None
+        self._errors: List[str] = []
 
     # Actions ----------------------------------------------------------------
     def get_action_names(self) -> List[str]:
@@ -59,6 +59,10 @@ class ProviderMux:
                         list(info2.names) if isinstance(info2, ActionInfo) else names1
                     )
                     if names1 != names2:
+                        self._add_error(
+                            "get_action_names",
+                            "provider returned inconsistent action names",
+                        )
                         _warnings.warn(
                             "plume_nav_debugger:provider_nondeterministic get_action_info returned different results",
                             RuntimeWarning,
@@ -69,7 +73,12 @@ class ProviderMux:
                         if n == 0 or n == len(names1):
                             self._action_names = names1
                             return list(self._action_names)
+                        self._add_error(
+                            "get_action_names",
+                            f"provider returned {len(names1)} names but env has {n} actions",
+                        )
             except Exception:
+                self._add_error("get_action_names", "provider raised an exception")
                 pass
         # No provider → no labels
         self._action_names = []
@@ -94,6 +103,10 @@ class ProviderMux:
                         else keys1
                     )
                     if len(keys1) != 1 or keys1 != keys2:
+                        self._add_error(
+                            "policy_distribution",
+                            "provider returned inconsistent distribution payload keys",
+                        )
                         _warnings.warn(
                             "plume_nav_debugger:provider_invalid_distribution_keys provider must return exactly one of probs|q_values|logits consistently",
                             RuntimeWarning,
@@ -110,15 +123,27 @@ class ProviderMux:
                             q = np.asarray(d["q_values"], dtype=float).ravel()
                             return _softmax(q) if (n == 0 or len(q) == n) else None
                         if k == "logits" and _is_1d(d.get("logits")):
-                            l = np.asarray(d["logits"], dtype=float).ravel()
-                            return _softmax(l) if (n == 0 or len(l) == n) else None
+                            logits = np.asarray(d["logits"], dtype=float).ravel()
+                            return (
+                                _softmax(logits)
+                                if (n == 0 or len(logits) == n)
+                                else None
+                            )
                         return None
 
                     p1 = _to_probs(res1, key)
                     p2 = _to_probs(res2 if isinstance(res2, dict) else res1, key)
                     if p1 is None or p2 is None:
+                        self._add_error(
+                            "policy_distribution",
+                            "provider distribution shape/values invalid for action space",
+                        )
                         return None
                     if not np.allclose(p1, p2, rtol=1e-8, atol=1e-12):
+                        self._add_error(
+                            "policy_distribution",
+                            "provider returned non-deterministic distribution",
+                        )
                         _warnings.warn(
                             "plume_nav_debugger:provider_nondeterministic policy_distribution returned different results for same input",
                             RuntimeWarning,
@@ -127,6 +152,7 @@ class ProviderMux:
                     return p1.tolist()
             except Exception:
                 tried_provider = True
+                self._add_error("policy_distribution", "provider raised an exception")
             # If provider responded but was invalid, do not fallback
             if tried_provider:
                 return None
@@ -145,6 +171,10 @@ class ProviderMux:
                     names1 = list(p1.names)
                     names2 = list(p2.names) if isinstance(p2, PipelineInfo) else names1
                     if names1 != names2:
+                        self._add_error(
+                            "get_pipeline",
+                            "provider returned inconsistent pipeline info",
+                        )
                         _warnings.warn(
                             "plume_nav_debugger:provider_nondeterministic get_pipeline returned different results",
                             RuntimeWarning,
@@ -153,6 +183,7 @@ class ProviderMux:
                         self._pipeline = names1
                         return list(self._pipeline)
             except Exception:
+                self._add_error("get_pipeline", "provider raised an exception")
                 pass
         # No provider → no pipeline
         self._pipeline = []
@@ -177,6 +208,9 @@ class ProviderMux:
             # Determinism: double-check
             res2 = self._provider.describe_observation(obs_ro)
         except Exception:
+            self._add_error(
+                "describe_observation", "provider raised an exception during describe"
+            )
             return None
         # Accept either ObservationInfo or duck-typed dict with keys
         kind: Optional[str] = None
@@ -192,11 +226,19 @@ class ProviderMux:
             if isinstance(v, str) or v is None:
                 label = v
         else:
+            self._add_error(
+                "describe_observation",
+                f"provider returned unsupported type {type(res).__name__}",
+            )
             return None
 
         # If second response is structured, compare for determinism
         if isinstance(res2, ObservationInfo):
             if (res2.kind != kind) or (res2.label != label):
+                self._add_error(
+                    "describe_observation",
+                    "provider returned inconsistent observation metadata",
+                )
                 _warnings.warn(
                     "plume_nav_debugger:provider_nondeterministic describe_observation returned different results",
                     RuntimeWarning,
@@ -207,6 +249,10 @@ class ProviderMux:
             if (isinstance(k2, str) and k2 != kind) or (
                 (isinstance(l2, str) or l2 is None) and l2 != label
             ):
+                self._add_error(
+                    "describe_observation",
+                    "provider returned inconsistent observation metadata",
+                )
                 _warnings.warn(
                     "plume_nav_debugger:provider_nondeterministic describe_observation returned different results",
                     RuntimeWarning,
@@ -221,6 +267,15 @@ class ProviderMux:
         self._obs_kind_cache = kind
         self._obs_label_cache = label if isinstance(label, str) else None
         return ObservationInfo(kind=kind, label=self._obs_label_cache)
+
+    # Error tracking ----------------------------------------------------------
+    def get_errors(self) -> List[str]:
+        return list(self._errors)
+
+    def _add_error(self, code: str, detail: Optional[str] = None) -> None:
+        msg = code if detail is None else f"{code}: {detail}"
+        if msg not in self._errors:
+            self._errors.append(msg)
 
 
 def _is_1d(x: Any) -> bool:

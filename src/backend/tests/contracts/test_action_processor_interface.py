@@ -16,11 +16,11 @@ Usage:
 
 import copy
 
+import gymnasium as gym
 import numpy as np
 import pytest
 from hypothesis import HealthCheck, given, settings
 
-import gymnasium as gym
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.core.state import AgentState
 from plume_nav_sim.interfaces import ActionProcessor

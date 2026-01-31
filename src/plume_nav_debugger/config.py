@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
 
-DEFAULT_CONFIG_PATH = Path.home() / ".config" / "plume-nav-sim" / "debugger.json"
+DEFAULT_CONFIG_PATH = Path.home() / ".config" / "plume_nav_sim" / "debugger.json"
+LEGACY_CONFIG_PATH = Path.home() / ".config" / "plume-nav-sim" / "debugger.json"
+QSETTINGS_ORG = "plume_nav_sim"
+LEGACY_QSETTINGS_ORG = "plume-nav-sim"
+QSETTINGS_APP = "Debugger"
 
 
 @dataclass
@@ -14,6 +16,7 @@ class DebuggerPreferences:
     show_pipeline: bool = True
     show_preview: bool = True
     show_sparkline: bool = True
+    show_overlays: bool = True
     default_interval_ms: int = 50
     theme: str = "light"  # or "dark"
 
@@ -22,11 +25,30 @@ class DebuggerPreferences:
         try:
             from PySide6 import QtCore
 
-            s = QtCore.QSettings("plume-nav-sim", "Debugger")
+            s_new = QtCore.QSettings(QSETTINGS_ORG, QSETTINGS_APP)
+            keys = (
+                "prefs/show_pipeline",
+                "prefs/show_preview",
+                "prefs/show_sparkline",
+                "prefs/show_overlays",
+                "prefs/default_interval_ms",
+                "prefs/theme",
+            )
+            use_new = False
+            try:
+                use_new = any(s_new.contains(k) for k in keys)
+            except Exception:
+                use_new = False
+            s = (
+                s_new
+                if use_new
+                else QtCore.QSettings(LEGACY_QSETTINGS_ORG, QSETTINGS_APP)
+            )
             return cls(
                 show_pipeline=bool(s.value("prefs/show_pipeline", True, type=bool)),
                 show_preview=bool(s.value("prefs/show_preview", True, type=bool)),
                 show_sparkline=bool(s.value("prefs/show_sparkline", True, type=bool)),
+                show_overlays=bool(s.value("prefs/show_overlays", True, type=bool)),
                 default_interval_ms=int(
                     s.value("prefs/default_interval_ms", 50, type=int)
                 ),
@@ -39,10 +61,11 @@ class DebuggerPreferences:
         try:
             from PySide6 import QtCore
 
-            s = QtCore.QSettings("plume-nav-sim", "Debugger")
+            s = QtCore.QSettings(QSETTINGS_ORG, QSETTINGS_APP)
             s.setValue("prefs/show_pipeline", self.show_pipeline)
             s.setValue("prefs/show_preview", self.show_preview)
             s.setValue("prefs/show_sparkline", self.show_sparkline)
+            s.setValue("prefs/show_overlays", self.show_overlays)
             s.setValue("prefs/default_interval_ms", int(self.default_interval_ms))
             s.setValue("prefs/theme", self.theme)
         except Exception:
@@ -57,6 +80,7 @@ class DebuggerPreferences:
                 show_pipeline=bool(data.get("show_pipeline", True)),
                 show_preview=bool(data.get("show_preview", True)),
                 show_sparkline=bool(data.get("show_sparkline", True)),
+                show_overlays=bool(data.get("show_overlays", True)),
                 default_interval_ms=int(data.get("default_interval_ms", 50)),
                 theme=str(data.get("theme", "light")),
             )
@@ -74,9 +98,18 @@ class DebuggerPreferences:
     @classmethod
     def initial_load(cls) -> "DebuggerPreferences":  # pragma: no cover - IO
         # Prefer JSON if present; otherwise use QSettings defaults
+        path = None
         if DEFAULT_CONFIG_PATH.exists():
-            prefs = cls.load_json_file(DEFAULT_CONFIG_PATH)
-            # sync into QSettings as the current baseline
+            path = DEFAULT_CONFIG_PATH
+        elif LEGACY_CONFIG_PATH.exists():
+            path = LEGACY_CONFIG_PATH
+        if path is not None:
+            prefs = cls.load_json_file(path)
+            if path != DEFAULT_CONFIG_PATH:
+                try:
+                    prefs.save_json_file(DEFAULT_CONFIG_PATH)
+                except Exception:
+                    pass
             prefs.to_qsettings()
             return prefs
         # Load from QSettings or defaults

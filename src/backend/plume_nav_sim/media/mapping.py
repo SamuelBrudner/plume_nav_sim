@@ -1,23 +1,3 @@
-"""Deterministic mapping from simulation step index to video frame index.
-
-This module defines a small, explicit contract for how simulation steps
-map to video frames for movie-backed plume fields. It provides:
-
-- A validated timebase that can be expressed as either a float FPS or a
-  rational numerator/denominator (e.g., 30000/1001 for NTSC ~29.97 fps).
-- Boundary policies for how to handle steps beyond the last frame
-  ("index" error, "clamp", or "wrap").
-- A helper to compute the frame index from a step with clear rounding.
-
-Notes on timebase:
-- If both `fps` and `(timebase_numer, timebase_denom)` are provided,
-  they must be consistent within a small tolerance.
-- The rational form is interpreted as `fps = timebase_numer / timebase_denom`.
-  For example, NTSC 29.97 is 30000/1001.
-
-Rounding policy applies to the fractional frame index before boundary handling.
-"""
-
 from __future__ import annotations
 
 import math
@@ -39,12 +19,6 @@ DEFAULT_ROUNDING: Literal["floor"] = ROUND_FLOOR
 
 @dataclass(frozen=True)
 class VideoTimebase:
-    """Validated video timebase.
-
-    Provide either `fps` or the rational `(timebase_numer, timebase_denom)`.
-    If both are provided they must agree within `tol`.
-    """
-
     fps: Optional[float] = None
     timebase_numer: Optional[int] = None
     timebase_denom: Optional[int] = None
@@ -93,30 +67,6 @@ def map_step_to_frame(
     boundary: Literal["index", "clamp", "wrap"] = DEFAULT_STEP_POLICY,
     rounding: Literal["floor", "nearest", "ceil"] = DEFAULT_ROUNDING,
 ) -> int:
-    """Map a simulation step index to a video frame index deterministically.
-
-    Args:
-        step: Simulation step index (0-based).
-        total_frames: Total number of frames `T` in the video (T > 0).
-        timebase: Video timebase (fps) used for mapping.
-        step_hz: Simulation step rate in steps per second. If None, defaults to
-            `timebase.fps_value`, i.e., one video frame per simulation step.
-        offset_frames: Constant frame offset applied after time mapping.
-        boundary: Policy for handling indices outside [0, T-1]:
-            - "index": raise IndexError
-            - "clamp": clamp to endpoints 0..T-1
-            - "wrap": modulo wrap around T
-        rounding: Rounding policy applied to the fractional frame index before
-            boundary handling: "floor", "nearest", or "ceil".
-
-    Returns:
-        An integer frame index in [0, T-1] (except "index" may raise).
-
-    Raises:
-        ValueError: If inputs are invalid.
-        IndexError: If boundary policy is "index" and the computed index is OOB.
-    """
-
     _validate_step_and_total_frames(step=step, total_frames=total_frames)
 
     fps = timebase.fps_value
@@ -211,16 +161,6 @@ __all__ = [
 
 
 def video_timebase_from_attrs(attrs: Mapping[str, Any]) -> VideoTimebase:
-    """Construct a VideoTimebase from dataset attributes mapping.
-
-    Expected keys (optional):
-      - "fps": float-like (frames per second)
-      - "timebase_numer": int-like
-      - "timebase_denom": int-like
-
-    At least one representation must be present, else ValueError is raised.
-    """
-
     def _maybe_float(x: Any) -> Optional[float]:
         if x is None:
             return None

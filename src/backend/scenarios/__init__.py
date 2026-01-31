@@ -483,7 +483,7 @@ def create_integrated_test_matrix(
             max_execution_time = resource_constraints.get(
                 "max_execution_time_minutes", 30
             )
-            max_parallel_jobs = resource_constraints.get("max_parallel_jobs", 4)
+            _ = resource_constraints.get("max_parallel_jobs", 4)
 
             # Filter scenarios based on resource constraints
             filtered_scenarios = {}

@@ -15,27 +15,20 @@ import statistics  # >=3.10 - Statistical analysis of random agent performance i
 import sys  # >=3.10 - System interface for exit handling and error status reporting
 import time  # >=3.10 - High-precision timing measurements for step latency analysis and performance monitoring
 
+# External imports with version comments
+import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framework for random agent interaction and standard RL API usage
 import matplotlib.pyplot as plt  # >=3.9.0 - Optional visualization and plotting capabilities for random agent trajectory analysis and performance graphs
 import numpy as np  # >=2.1.0 - Random number generation, statistical analysis, and array operations for random agent behavior and performance analysis
 
-# External imports with version comments
-import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framework for random agent interaction and standard RL API usage
 from plume_nav_sim.core.constants import (  # Default maximum episode steps for random agent episode configuration and performance target constant for step latency benchmarking and analysis
     DEFAULT_MAX_STEPS,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
-from plume_nav_sim.core.types import (  # Action enumeration for random action selection and movement direction analysis
-    Action,
-)
 
 # Internal imports from plume_nav_sim package
 from plume_nav_sim.registration.register import (  # Environment registration function enabling gym.make() instantiation for random agent demonstration
-    COMPONENT_ENV_ID,
     ENV_ID,
     register_env,
-)
-from plume_nav_sim.utils.exceptions import (  # Base exception handling for comprehensive error management in random agent execution
-    PlumeNavSimError,
 )
 
 # Global constants and configuration
@@ -123,7 +116,7 @@ def create_random_policy(env: gym.Env, policy_seed: int = None) -> callable:
     if hasattr(env.action_space, "n"):
         action_space_size = env.action_space.n
     else:
-        raise PlumeNavSimError(
+        raise RuntimeError(
             f"Environment action space {type(env.action_space)} not supported for random policy"
         )
 
@@ -267,7 +260,7 @@ def execute_random_episode(
         if render_episode:
             try:
                 render_start_time = time.time()
-                rendered_frame = env.render()
+                _ = env.render()
                 render_duration = (time.time() - render_start_time) * 1000
 
                 # Track rendering performance
@@ -1172,14 +1165,14 @@ def generate_random_agent_report(
     if stats:
         report_lines.extend(
             [
-                f"Episode Statistics:",
+                "Episode Statistics:",
                 f"  • Total Episodes: {stats.get('total_episodes', 0)}",
                 f"  • Successful Episodes: {stats.get('successful_episodes', 0)}",
                 f"  • Success Rate: {stats.get('success_rate', 0.0) * 100:.2f}%",
                 f"  • Average Steps per Episode: {stats.get('avg_steps', 0.0):.1f}",
                 f"  • Average Reward per Episode: {stats.get('avg_reward', 0.0):.3f}",
                 "",
-                f"Performance Distribution:",
+                "Performance Distribution:",
                 f"  • Steps Standard Deviation: {stats.get('steps_std', 0.0):.2f}",
                 f"  • Reward Standard Deviation: {stats.get('reward_std', 0.0):.3f}",
                 f"  • Median Steps: {stats.get('steps_median', 0.0):.1f}",
@@ -1195,7 +1188,7 @@ def generate_random_agent_report(
             [
                 "PERFORMANCE ANALYSIS",
                 "-" * 40,
-                f"Step Latency Analysis:",
+                "Step Latency Analysis:",
                 f"  • Total Steps Measured: {performance.get('total_steps_analyzed', 0)}",
                 f"  • Average Latency: {performance.get('avg_step_latency_ms', 0.0):.2f}ms",
                 f"  • Maximum Latency: {performance.get('max_step_latency_ms', 0.0):.2f}ms",
@@ -1212,7 +1205,7 @@ def generate_random_agent_report(
             [
                 "EXPLORATION ANALYSIS",
                 "-" * 40,
-                f"Coverage Statistics:",
+                "Coverage Statistics:",
                 f"  • Average Coverage: {exploration.get('avg_coverage', 0.0):.1f} positions",
                 f"  • Maximum Coverage: {exploration.get('max_coverage', 0)} positions",
                 f"  • Minimum Coverage: {exploration.get('min_coverage', 0)} positions",
@@ -1225,7 +1218,7 @@ def generate_random_agent_report(
         if "action_distribution" in exploration:
             report_lines.extend(
                 [
-                    f"Action Distribution:",
+                    "Action Distribution:",
                     f"  • Up (0): {exploration['action_distribution'].get(0, 0.0):.1f}%",
                     f"  • Right (1): {exploration['action_distribution'].get(1, 0.0):.1f}%",
                     f"  • Down (2): {exploration['action_distribution'].get(2, 0.0):.1f}%",
@@ -1241,7 +1234,7 @@ def generate_random_agent_report(
             [
                 "SUCCESS ANALYSIS",
                 "-" * 40,
-                f"Goal Achievement:",
+                "Goal Achievement:",
                 f"  • Episodes Reaching Goal: {success_analysis.get('episodes_reaching_goal', 0)}",
                 f"  • Success Percentage: {success_analysis.get('success_percentage', 0.0):.1f}%",
             ]
@@ -1343,7 +1336,7 @@ def generate_random_agent_report(
             f"This analysis of {stats.get('total_episodes', 0)} random agent episodes provides",
             "comprehensive baseline performance metrics for plume navigation research.",
             "",
-            f"Key findings:",
+            "Key findings:",
             f"• Random exploration achieves {success_rate * 100:.1f}% goal success rate",
             f"• Average episode requires {stats.get('avg_steps', 0):.0f} steps for completion",
             f"• System performance meets latency targets with {performance.get('performance_target_compliance', 0):.1f}% compliance",
@@ -1422,8 +1415,8 @@ def benchmark_random_agent(
 
     try:
         # Register DI environment id for benchmarking (legacy remains supported)
-        register_env(env_id=COMPONENT_ENV_ID, force_reregister=True)
-        env = gym.make(COMPONENT_ENV_ID, render_mode="rgb_array")
+        register_env(env_id=ENV_ID, force_reregister=True)
+        env = gym.make(ENV_ID, render_mode="rgb_array")
 
         # Execute baseline performance testing with standard configuration and statistical analysis
         _logger.info("Executing baseline performance testing")
@@ -1714,14 +1707,14 @@ def run_random_agent_demo(demo_config: dict = None) -> int:
     try:
         # Register environment using register_env() with error handling and validation
         _logger.info("Registering plume navigation environment (DI)")
-        register_env(env_id=COMPONENT_ENV_ID, force_reregister=True)
+        register_env(env_id=ENV_ID, force_reregister=True)
 
         # Create environment instance using gym.make() with render mode and configuration
         render_mode = (
             "human" if demo_config.get("render_episodes", False) else "rgb_array"
         )
         _logger.info(f"Creating environment with render mode: {render_mode}")
-        env = gym.make(COMPONENT_ENV_ID, render_mode=render_mode)
+        env = gym.make(ENV_ID, render_mode=render_mode)
 
         # Execute random agent analysis using run_random_agent_analysis() with comprehensive tracking
         _logger.info("Executing random agent analysis")
@@ -1814,7 +1807,7 @@ def run_random_agent_demo(demo_config: dict = None) -> int:
                 f"\nBenchmarking completed - Performance validation: {'PASSED' if validation_passed else 'NEEDS_ATTENTION'}"
             )
 
-    except PlumeNavSimError as sim_error:
+    except RuntimeError as sim_error:
         _logger.error(f"Simulation error during demonstration: {sim_error}")
         return 1
     except Exception as demo_error:
@@ -1909,7 +1902,7 @@ def main() -> None:
     # Parse command-line arguments with validation and default value application
     try:
         args = parser.parse_args()
-    except SystemExit as parse_error:
+    except SystemExit:
         # argparse calls sys.exit() on error
         return
 

@@ -10,7 +10,7 @@ from plume_nav_sim.core.geometry import GridSize
 from plume_nav_sim.envs.component_env import ComponentBasedEnvironment
 from plume_nav_sim.interfaces import ObservationModel, RewardFunction
 from plume_nav_sim.observations import ConcentrationSensor
-from plume_nav_sim.plume.concentration_field import ConcentrationField
+from plume_nav_sim.plume.gaussian import GaussianPlume
 
 
 class DenseReward(RewardFunction):
@@ -88,8 +88,7 @@ def build_environment() -> ComponentBasedEnvironment:
     action_processor = DiscreteGridActions(step_size=1)
     observation_model = NoisyConcentrationSensor(sigma=0.1)
 
-    field = ConcentrationField(grid_size)
-    field.generate_field(goal_location)
+    field = GaussianPlume(grid_size=grid_size, source_location=goal_location)
 
     reward = DenseReward(goal_radius=goal_radius)
 

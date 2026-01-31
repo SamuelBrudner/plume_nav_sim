@@ -1,34 +1,15 @@
-"""
-Color scheme management module providing comprehensive color configuration, validation,
-accessibility features, and performance optimization for dual-mode plume navigation
-visualization. Supports both RGB array generation and matplotlib human mode rendering
-with predefined schemes, custom scheme creation, validation, and rendering integration
-for consistent visual representation across all visualization modes.
-"""
+import copy
+import functools
+import logging
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-import copy  # >=3.10 - Deep copying for color scheme cloning and parameter overrides
-import functools  # >=3.10 - LRU cache decorator for colormap caching and performance optimization
-import logging  # >=3.10 - Color scheme operation logging and performance monitoring
-from dataclasses import (  # >=3.10 - Structured color scheme configuration with validation
-    dataclass,
-    field,
-)
-from typing import (  # >=3.10 - Type hints for parameters and methods
-    Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
+import matplotlib.cm as cm
+import matplotlib.colors
+import numpy as np
 
-import matplotlib.cm as cm  # >=3.9.0 - Colormap registry access and colormap object management
-import matplotlib.colors  # >=3.9.0 - Colormap objects, normalization utilities, color space conversions
-
-# External imports - Third-party libraries with version requirements
-import numpy as np  # >=2.1.0 - Array operations, RGB color manipulation, concentration field processing
-
-from ..core.constants import (
+from .._compat import RenderingError, ValidationError, validate_render_mode
+from ..constants import (
     AGENT_MARKER_COLOR,
     AGENT_MARKER_SIZE,
     CONCENTRATION_RANGE,
@@ -37,14 +18,9 @@ from ..core.constants import (
     SOURCE_MARKER_COLOR,
     SOURCE_MARKER_SIZE,
 )
-
-# Internal imports - Project-specific modules and utilities
 from ..core.types import Coordinates, RenderMode
-from ..utils.exceptions import RenderingError, ValidationError
-from ..utils.validation import sanitize_parameters, validate_render_mode
 from .colormaps import DEFAULT_COLORMAP, PredefinedScheme
 
-# Module-level configuration and constants
 __all__ = [
     "ColorSchemeManager",
     "PredefinedScheme",
@@ -76,13 +52,6 @@ logger = logging.getLogger(__name__)
 
 
 def _safe_get_cmap(colormap_name: str):  # noqa: C901
-    """Resolve a matplotlib colormap robustly.
-
-    Uses the modern matplotlib.colormaps API when available to avoid deprecation
-    paths, falling back to matplotlib.cm.get_cmap. Returns None if colormap
-    resolution fails due to import-time issues (e.g., mocked __import__), but
-    raises ValueError if the colormap name is genuinely invalid.
-    """
     try:
         # Prefer modern API to avoid deprecation warnings and internal imports
         if hasattr(matplotlib, "colormaps"):
@@ -111,12 +80,6 @@ def _safe_get_cmap(colormap_name: str):  # noqa: C901
 
 @dataclass
 class CustomColorScheme:
-    """
-    Custom color scheme data class providing flexible color configuration, validation,
-    accessibility features, and rendering integration for plume navigation visualization
-    with support for dual-mode rendering and performance optimization.
-    """
-
     agent_color: Tuple[int, int, int]
     source_color: Tuple[int, int, int]
     background_color: Tuple[int, int, int]
@@ -195,10 +158,6 @@ class CustomColorScheme:
         agent_position: Coordinates,
         source_position: Coordinates,
     ) -> np.ndarray:
-        """
-        Apply complete color scheme to RGB array including concentration field background
-        and positioned markers for programmatic rendering.
-        """
         # Convert concentration field [0,1] to RGB array using normalize_concentration_to_rgb()
         rgb_array = normalize_concentration_to_rgb(
             concentration_field,
@@ -238,10 +197,6 @@ class CustomColorScheme:
     def configure_matplotlib_axes(
         self, axes: Any, concentration_field: np.ndarray
     ) -> Any:
-        """
-        Configure matplotlib axes with color scheme for human mode interactive visualization
-        including colormap and normalization setup.
-        """
         # Get concentration colormap using get_matplotlib_colormap() with caching
         colormap = get_matplotlib_colormap(
             self.concentration_colormap,
@@ -275,10 +230,6 @@ class CustomColorScheme:
         target_mode: RenderMode,
         optimization_options: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """
-        Optimize color scheme configuration for specific rendering mode with performance
-        enhancements and caching strategies.
-        """
         # Set optimized_for_mode to target_mode for optimization tracking
         self.optimized_for_mode = target_mode
 
@@ -318,10 +269,6 @@ class CustomColorScheme:
     def enable_accessibility(
         self, accessibility_type: Optional[str] = None, validate_contrast: bool = True
     ) -> None:
-        """
-        Enable accessibility features including high contrast, enhanced visibility,
-        and colorblind-friendly modifications.
-        """
         # Set accessibility_enabled to True
         self.accessibility_enabled = True
 
@@ -373,10 +320,6 @@ class CustomColorScheme:
         check_performance: bool = False,
         strict_validation: bool = False,
     ) -> bool:
-        """
-        Comprehensive validation of color scheme configuration with accessibility,
-        performance, and integration checking.
-        """
         try:
             # Validate all RGB colors are in range [0,255] with proper types
             for color_name, color_value in [
@@ -430,7 +373,6 @@ class CustomColorScheme:
 
             # Apply strict validation rules if strict_validation is True
             if strict_validation:
-                # Additional comprehensive checks
                 if sum(self.agent_color) == sum(self.background_color):
                     raise ValidationError("Agent color too similar to background color")
 
@@ -446,10 +388,6 @@ class CustomColorScheme:
         color_overrides: Optional[Dict[str, Any]] = None,
         preserve_optimizations: bool = True,
     ) -> "CustomColorScheme":
-        """
-        Create deep copy of color scheme with optional parameter overrides for
-        customization and experimentation.
-        """
         # Create deep copy of all color scheme parameters using copy.deepcopy()
         cloned_scheme = copy.deepcopy(self)
 
@@ -483,10 +421,6 @@ class CustomColorScheme:
         include_optimization_info: bool = False,
         sanitize_for_logging: bool = False,
     ) -> Dict[str, Any]:
-        """
-        Convert color scheme to dictionary representation for serialization
-        and configuration storage.
-        """
         # Create dictionary with RGB color values for agent, source, background
         scheme_dict = {
             "agent_color": self.agent_color,
@@ -515,11 +449,6 @@ class CustomColorScheme:
 
 @dataclass
 class AccessibilityConfig:
-    """
-    Accessibility configuration data class providing contrast requirements, colorblind-friendly
-    settings, and enhanced visibility features for inclusive plume navigation visualization.
-    """
-
     min_contrast_ratio: float = ACCESSIBILITY_CONTRAST_RATIO_MIN
     colorblind_friendly: bool = False
     high_contrast_mode: bool = False
@@ -527,9 +456,6 @@ class AccessibilityConfig:
     accessibility_overrides: Dict[str, Any] = field(default_factory=dict)
 
     def apply_to_scheme(self, color_scheme: CustomColorScheme) -> CustomColorScheme:
-        """
-        Apply accessibility configuration to color scheme with comprehensive enhancements.
-        """
         # Clone the color scheme to avoid modifying original
         enhanced_scheme = color_scheme.clone()
 
@@ -569,9 +495,6 @@ class AccessibilityConfig:
     def validate_compliance(
         self, color_scheme: CustomColorScheme
     ) -> Tuple[bool, Dict[str, Any]]:
-        """
-        Validate color scheme accessibility compliance against configuration requirements.
-        """
         compliance_report = {
             "is_compliant": True,
             "contrast_ratios": {},
@@ -606,11 +529,6 @@ class AccessibilityConfig:
 
 
 class ColorPalette:
-    """
-    Color palette utility class providing color manipulation, conversion, accessibility
-    analysis, and validation for comprehensive color management in plume navigation visualization.
-    """
-
     def __init__(self, colors: Dict[str, Any], palette_name: Optional[str] = None):
         """Initialize color palette with color dictionary and accessibility analysis."""
         # Validate colors dictionary contains required color definitions
@@ -695,7 +613,6 @@ class ColorPalette:
         return (max(lum1, lum2) + 0.05) / (min(lum1, lum2) + 0.05)
 
     def generate_accessibility_report(self) -> Dict[str, Any]:
-        """Generate comprehensive accessibility analysis for color palette."""
         report = {
             "palette_name": self.palette_name,
             "total_colors": len(self.colors),
@@ -734,12 +651,6 @@ class ColorPalette:
 
 
 class ColorSchemeManager:
-    """
-    Central color scheme management class providing comprehensive color scheme operations,
-    validation, caching, optimization, and rendering integration for dual-mode plume navigation
-    visualization with performance monitoring and accessibility support.
-    """
-
     def __init__(
         self,
         enable_caching: bool = True,
@@ -781,10 +692,6 @@ class ColorSchemeManager:
         render_mode: Optional[RenderMode] = None,
         use_cache: bool = True,
     ) -> CustomColorScheme:
-        """
-        Retrieve color scheme by name with caching, validation, and performance optimization
-        for rendering operations.
-        """
         # Generate cache key from scheme_name and render_mode parameters
         cache_key = f"{scheme_name}_{render_mode}"
 
@@ -836,16 +743,11 @@ class ColorSchemeManager:
         enable_accessibility: bool = False,
         register_scheme: bool = True,
     ) -> CustomColorScheme:
-        """
-        Create and register custom color scheme with comprehensive validation, accessibility
-        features, and performance optimization.
-        """
         # Validate scheme_name uniqueness and format requirements
         if not isinstance(scheme_name, str) or not scheme_name.strip():
             raise ValidationError("scheme_name must be a non-empty string")
 
-        # Parse color_config dictionary with comprehensive parameter validation
-        sanitized_config = sanitize_parameters(color_config)
+        sanitized_config = copy.deepcopy(color_config)
 
         # Create CustomColorScheme using create_color_scheme() with configuration
         color_scheme = create_color_scheme(
@@ -881,10 +783,6 @@ class ColorSchemeManager:
         check_performance: bool = False,
         check_matplotlib_integration: bool = True,
     ) -> Tuple[bool, Dict[str, Any]]:
-        """
-        Comprehensive color scheme validation with accessibility, performance, and integration checking.
-        """
-        # Delegate to validate_color_scheme() function with comprehensive checking
         self.performance_metrics["validation_count"] += 1
 
         return validate_color_scheme(
@@ -900,10 +798,6 @@ class ColorSchemeManager:
         target_mode: RenderMode,
         optimization_config: Optional[Dict[str, Any]] = None,
     ) -> CustomColorScheme:
-        """
-        Apply performance optimization to color scheme for specified rendering mode with
-        caching and pre-computation.
-        """
         # Delegate to optimize_for_render_mode() function with performance configuration
         optimized_scheme = color_scheme.clone()
         optimized_scheme.optimize_for_render_mode(target_mode, optimization_config)
@@ -927,9 +821,6 @@ class ColorSchemeManager:
         clear_colormap_cache: bool = True,
         reset_metrics: bool = False,
     ) -> Dict[str, Any]:
-        """
-        Clear scheme and colormap caches with memory management and performance statistics reset.
-        """
         # Calculate current cache sizes before clearing
         initial_scheme_count = len(self.scheme_cache)
         initial_colormap_count = len(self.colormap_cache)
@@ -976,10 +867,6 @@ class ColorSchemeManager:
         include_cache_stats: bool = True,
         include_optimization_analysis: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Retrieve comprehensive performance metrics for color scheme operations with timing
-        analysis and optimization recommendations.
-        """
         metrics = self.performance_metrics.copy()
         metrics["timestamp"] = (
             logging.getLogger()
@@ -1030,11 +917,6 @@ def create_color_scheme(  # noqa: C901
     validate_immediately: bool = True,
     performance_config: Optional[Dict[str, Any]] = None,
 ) -> CustomColorScheme:
-    """
-    Factory function to create custom color scheme with comprehensive validation, accessibility
-    features, performance optimization, and rendering mode compatibility for dual-mode plume
-    navigation visualization.
-    """
     try:
         # Parse scheme_config input: handle dict configuration, PredefinedScheme enum, or string scheme name
         if isinstance(scheme_config, PredefinedScheme):
@@ -1106,10 +988,6 @@ def get_default_scheme(
     enable_caching: bool = True,
     apply_accessibility: bool = False,
 ) -> CustomColorScheme:
-    """
-    Factory function to retrieve default color scheme with standard plume navigation colors
-    optimized for dual-mode rendering, accessibility compliance, and performance targets.
-    """
     # Check scheme cache if enable_caching is True
     cache_key = f"default_{render_mode}_{apply_accessibility}"
     if enable_caching and cache_key in SCHEME_CACHE:
@@ -1155,10 +1033,6 @@ def create_accessibility_scheme(
     custom_colors: Optional[Dict[str, Any]] = None,
     validate_contrast: bool = True,
 ) -> CustomColorScheme:
-    """
-    Factory function to create accessibility-enhanced color scheme with high contrast ratios,
-    colorblind-friendly colors, and enhanced visibility features for inclusive visualization.
-    """
     # Validate accessibility_type against supported options
     supported_types = ["high_contrast", "colorblind_friendly", "low_vision"]
     if accessibility_type not in supported_types:
@@ -1231,11 +1105,6 @@ def optimize_for_render_mode(
     enable_caching: bool = True,
     validate_performance: bool = True,
 ) -> CustomColorScheme:
-    """
-    Performance optimization function for color scheme configuration targeting specific rendering
-    modes with caching strategies, pre-computation, and mode-specific enhancements to meet
-    performance targets.
-    """
     # Validate target_mode is supported RenderMode enum value
     validate_render_mode(target_mode)
 
@@ -1299,10 +1168,6 @@ def validate_color_scheme(  # noqa: C901
     validate_matplotlib_integration: bool = True,
     strict_validation: bool = False,
 ) -> Tuple[bool, Dict[str, Any]]:
-    """
-    Comprehensive color scheme validation ensuring RGB value consistency, matplotlib colormap
-    availability, accessibility compliance, and rendering compatibility with detailed error reporting.
-    """
     validation_report = {
         "is_valid": True,
         "errors": [],
@@ -1435,10 +1300,6 @@ def get_predefined_schemes(
     include_performance_info: bool = True,
     filter_by_mode: Optional[RenderMode] = None,
 ) -> Dict[str, Any]:
-    """
-    Utility function to retrieve list of all available predefined color schemes with descriptions,
-    accessibility features, and performance characteristics for scheme selection.
-    """
     schemes_info = {}
 
     # Enumerate all PredefinedScheme enum values
@@ -1512,10 +1373,6 @@ def normalize_concentration_to_rgb(
     normalization_range: Optional[Tuple[float, float]] = None,
     validate_output: bool = True,
 ) -> np.ndarray:
-    """
-    Utility function to convert concentration field values from normalized range [0,1] to RGB
-    grayscale values [0,255] using specified colormap with performance optimization and caching.
-    """
     # Validate concentration_field array dimensions and data type
     if not isinstance(concentration_field, np.ndarray):
         raise ValidationError("concentration_field must be a numpy array")
@@ -1574,10 +1431,6 @@ def apply_agent_marker(
     marker_size: Optional[Tuple[int, int]] = None,
     check_boundaries: bool = True,
 ) -> np.ndarray:
-    """
-    Utility function to apply agent marker visualization to RGB array at specified position
-    using configurable size, color, and shape with boundary checking and performance optimization.
-    """
     # Validate rgb_array dimensions (H,W,3) and data type
     if not isinstance(rgb_array, np.ndarray):
         raise ValidationError("rgb_array must be a numpy array")
@@ -1633,10 +1486,6 @@ def apply_source_marker(
     marker_size: Optional[Tuple[int, int]] = None,
     check_boundaries: bool = True,
 ) -> np.ndarray:
-    """
-    Utility function to apply source marker visualization to RGB array at specified position
-    using configurable cross pattern with size, color, and boundary handling.
-    """
     # Validate rgb_array dimensions (H,W,3) and data type
     if not isinstance(rgb_array, np.ndarray):
         raise ValidationError("rgb_array must be a numpy array")
@@ -1697,10 +1546,6 @@ def get_matplotlib_colormap(
     validate_backend: bool = True,
     enable_caching: bool = True,
 ) -> matplotlib.colors.Colormap:
-    """
-    Cached utility function to retrieve matplotlib colormap objects with normalization configuration,
-    performance optimization, and backend compatibility for human mode rendering.
-    """
     try:
         # Validate matplotlib backend availability if validate_backend is True
         if validate_backend:
@@ -1756,10 +1601,6 @@ def convert_rgb_to_matplotlib(  # noqa: C901
     validate_range: bool = True,
     output_format: str = "tuple",
 ) -> Union[Tuple[float, float, float], np.ndarray, str]:
-    """
-    Utility function to convert RGB color values to matplotlib-compatible format with normalization,
-    validation, and format conversion for human mode rendering integration.
-    """
     # Validate rgb_color input format and extract RGB values
     if isinstance(rgb_color, np.ndarray):
         if rgb_color.shape != (3,):

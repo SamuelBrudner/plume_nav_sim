@@ -246,6 +246,7 @@ demo.gif
 
 # Temporary directories and files
 tmp/
+local_scripts/
 temp/
 .tmp/
 .temp/

@@ -1,22 +1,3 @@
-"""
-Unified composition API for plume_nav_sim.
-
-This module centralizes composition-related types and helpers that were
-previously spread across ``plume_nav_sim.compose``. It provides a stable
-public surface for building environments and policies from simple specs
-and for lightweight policy loading.
-
-Contents
-- PolicySpec and SimulationSpec: typed spec models
-- load_policy/reset_policy_if_possible: dynamic policy loading helpers
-- build_env/build_policy/prepare: high‑level composition helpers
-
-Contributor guide
-- Add new builtin policies by extending build_policy() handling
-- Add new wrapper types by referencing them in SimulationSpec.observation_wrappers
-- Prefer importing from plume_nav_sim.config.composition moving forward
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -28,7 +9,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
 import plume_nav_sim as pns
-from plume_nav_sim.utils.spaces import is_space_subset
+from plume_nav_sim._compat import is_space_subset
 
 # ===== Specs =====
 
@@ -37,20 +18,11 @@ BuiltinPolicyName = Literal[
     "stochastic_td",
     "greedy_td",
     "random",
+    "surge_and_cast",
 ]
 
 
 class PolicySpec(BaseModel):
-    """Specification for constructing a policy.
-
-    One of:
-      - builtin: choose from curated names (deterministic_td, stochastic_td, random)
-      - spec: dotted path ("module:Attr" or "module.Attr") to import
-
-    kwargs are passed to builtin constructors and to class targets in dotted-path
-    form. Callable targets (functions) are returned as-is.
-    """
-
     model_config = ConfigDict(extra="forbid")
 
     builtin: Optional[BuiltinPolicyName] = Field(default=None)
@@ -82,41 +54,6 @@ class PolicySpec(BaseModel):
 
 
 class SimulationSpec(BaseModel):
-    """Specification for constructing an environment and policy.
-
-    Movie plume configuration
-    -------------------------
-
-    The ``plume`` and ``movie_*`` fields provide a lightweight front-end to
-    the component-based environment factory used by :func:`prepare`.
-
-    Under the movie metadata sidecar regime:
-
-    - ``movie_path`` selects the recording to use.
-    - ``movie_step_policy`` controls how environment steps map to frames.
-    - ``movie_fps``, ``movie_pixel_to_grid``, ``movie_origin``,
-      ``movie_extent`` and ``movie_h5_dataset`` are treated as validation
-      aliases:
-
-        * For raw media sources (files that will be ingested), these values
-          are forwarded to :func:`plume_nav_sim.plume.movie_field.resolve_movie_dataset_path`
-          and must agree with the movie metadata sidecar; they do not
-          override sidecar metadata.
-        * For already-ingested dataset directories (for example, ``*.zarr``),
-          the same fields remain optional overrides for the dataset's own
-          attrs and behave as before.
-
-    Unit conventions
-    ----------------
-
-    - Time is measured in seconds: ``movie_fps`` is always interpreted as
-      frames per second, and there is currently no separate ``time_unit``
-      field.
-    - For movie plumes, the physical spatial unit of the plume field is
-      determined by the movie metadata sidecar's ``spatial_unit``; there is
-      currently no separate ``SimulationSpec.spatial_unit`` override.
-    """
-
     model_config = ConfigDict(extra="forbid")
 
     # Environment parameters (subset; defaults are taken from make_env if None)
@@ -132,27 +69,22 @@ class SimulationSpec(BaseModel):
     render: bool = Field(default=True)
     plume: Optional[Literal["static", "movie"]] = Field(default=None)
     movie_path: Optional[str] = Field(default=None)
+    movie_dataset_id: Optional[str] = Field(default=None)
+    movie_auto_download: bool = Field(default=False)
+    movie_cache_root: Optional[str] = Field(default=None)
     movie_fps: Optional[float] = Field(default=None, gt=0)
     movie_pixel_to_grid: Optional[Tuple[float, float]] = Field(default=None)
     movie_origin: Optional[Tuple[float, float]] = Field(default=None)
     movie_extent: Optional[Tuple[float, float]] = Field(default=None)
     movie_step_policy: Optional[Literal["wrap", "clamp"]] = Field(default=None)
     movie_h5_dataset: Optional[str] = Field(default=None)
+    movie_normalize: Optional[str] = Field(default=None)
+    movie_chunks: Optional[Any] = Field(default=None)
 
     # Optional observation wrappers applied after env creation (in order).
     # Each wrapper is specified via dotted path and kwargs; the wrapper class
     # must have signature Wrapper(env, **kwargs) and return a gym.Env.
     class WrapperSpec(BaseModel):
-        """Specification for an observation wrapper to apply in prepare().
-
-        Fields
-        ------
-        spec
-            Dotted path identifying the wrapper class ("module:Class" or "module.Class").
-        kwargs
-            Keyword arguments forwarded to the wrapper constructor.
-        """
-
         model_config = ConfigDict(extra="forbid")
         spec: str
         kwargs: Dict[str, Any] = Field(default_factory=dict)
@@ -208,12 +140,6 @@ def _import_longest_prefix(dotted: str) -> tuple[ModuleType, Optional[str]]:
 
 
 def load_policy(spec: str, *, kwargs: Optional[dict] = None) -> LoadedPolicy:
-    """Load a policy from a spec string.
-
-    Accepted forms:
-    - "package.module:ClassOrCallable"
-    - "package.module.ClassOrCallable" (last dot splits module vs. attribute)
-    """
     if not isinstance(spec, str) or not spec.strip():
         raise ValueError("Policy spec must be a non-empty string")
 
@@ -253,15 +179,6 @@ def load_policy(spec: str, *, kwargs: Optional[dict] = None) -> LoadedPolicy:
 
 
 def reset_policy_if_possible(obj: Any, *, seed: Optional[int]) -> None:
-    """Call `reset(seed=...)` on policy-like objects when available.
-
-    Parameters
-    ----------
-    obj
-        Policy object that may define a `reset(seed=...)` method.
-    seed
-        Seed to pass to the reset method.
-    """
     with contextlib.suppress(Exception):
         obj.reset(seed=seed)  # type: ignore[attr-defined]
 
@@ -270,10 +187,6 @@ def reset_policy_if_possible(obj: Any, *, seed: Optional[int]) -> None:
 
 
 def _import_attr_for_wrapper(dotted: str) -> Any:
-    """Import a class/object specified by a dotted or module:Attr path.
-
-    Supports both "module:Attr.SubAttr" and "module.sub.Attr" forms.
-    """
     if ":" in dotted:
         module_name, attr_path = dotted.split(":", 1)
         mod = import_module(module_name)
@@ -299,14 +212,6 @@ def _add_if_not_none(
 
 
 def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
-    """Translate SimulationSpec into kwargs for pns.make_env.
-
-    Only forwards parameters explicitly set on the spec so that
-    make_env/env factories can apply their own defaults. For plume
-    parameters, this helper maps ``plume_sigma`` onto the modern
-    ``plume_params.sigma`` configuration expected by PlumeSearchEnv.
-    """
-
     kwargs: dict[str, Any] = {}
     _add_if_not_none(kwargs, "grid_size", spec.grid_size, tuple)
     _add_if_not_none(kwargs, "source_location", spec.source_location, tuple)
@@ -324,6 +229,9 @@ def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
 
     _add_if_not_none(kwargs, "plume", spec.plume)
     _add_if_not_none(kwargs, "movie_path", spec.movie_path)
+    _add_if_not_none(kwargs, "movie_dataset_id", spec.movie_dataset_id)
+    kwargs["movie_auto_download"] = bool(spec.movie_auto_download)
+    _add_if_not_none(kwargs, "movie_cache_root", spec.movie_cache_root)
     _add_if_not_none(kwargs, "movie_fps", spec.movie_fps, float)
     _add_if_not_none(
         kwargs,
@@ -345,6 +253,8 @@ def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
     )
     _add_if_not_none(kwargs, "movie_step_policy", spec.movie_step_policy)
     _add_if_not_none(kwargs, "movie_h5_dataset", spec.movie_h5_dataset)
+    _add_if_not_none(kwargs, "movie_normalize", spec.movie_normalize)
+    _add_if_not_none(kwargs, "movie_chunks", spec.movie_chunks)
 
     if spec.render:
         kwargs["render_mode"] = "rgb_array"
@@ -353,12 +263,6 @@ def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
 
 
 def build_env(spec: SimulationSpec):
-    """Construct an environment from SimulationSpec using pns.make_env.
-
-    This is a thin adapter that converts the high-level SimulationSpec into
-    the kwargs expected by the underlying PlumeSearchEnv/DI stack while
-    leaving defaults to the factory.
-    """
     kwargs = _build_env_kwargs_from_spec(spec)
     return pns.make_env(**kwargs)
 
@@ -381,14 +285,6 @@ def _make_random_sampler(env) -> Any:
 
 
 def build_policy(policy_spec: PolicySpec, *, env: Optional[Any] = None) -> Any:
-    """Construct a policy object from PolicySpec.
-
-    - builtin policies are instantiated directly
-    - dotted-path spec imports and instantiates class targets with kwargs if provided
-    - function targets are returned as-is
-
-    The 'random' builtin requires access to env; if not provided, raises.
-    """
     if policy_spec.builtin:
         name = policy_spec.builtin
         if name == "deterministic_td":
@@ -401,6 +297,10 @@ def build_policy(policy_spec: PolicySpec, *, env: Optional[Any] = None) -> Any:
             return TemporalDerivativePolicy(**policy_spec.kwargs)
         if name == "greedy_td":
             return _extracted_from_build_policy_23(policy_spec)
+        if name == "surge_and_cast":
+            from plume_nav_sim.policies import SurgeAndCastPolicy
+
+            return SurgeAndCastPolicy(**policy_spec.kwargs)
         # Note: run–tumble TD policy is intentionally not a builtin here.
         # External projects (or the demo package) should provide it via dotted-path.
         if name == "random":
@@ -431,10 +331,6 @@ def _extracted_from_build_policy_23(policy_spec):
 
 
 def prepare(sim: SimulationSpec) -> Tuple[Any, Any]:
-    """Build (env, policy) pair from SimulationSpec.
-
-    Applies deterministic reset(seed) to the policy if available.
-    """
     env = build_env(sim)
     # Apply observation wrappers (ordered), specified via dotted-path classes
     # with signature Wrapper(env, **kwargs) -> gym.Env

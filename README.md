@@ -1,13 +1,21 @@
 # plume-nav-sim
 
-Gymnasium-compatible plume navigation environments engineered for reproducible agent olfactory navigation simulations and reinforcement-learning research. Begin with a single `make_env()` call, customize through typed options, and inject bespoke components when experiments demand it.
+Gymnasium-compatible plume navigation environments engineered for reproducible simulations. Begin with a single `make_env()` call, customize through typed options, and inject bespoke components when experiments demand it.
 
+
+[![PyPI](https://img.shields.io/pypi/v/plume-nav-sim.svg)](https://pypi.org/project/plume-nav-sim/)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
+## Install
+
+```bash
+pip install plume-nav-sim
+```
+
 ## 1. What You Get
 
-- **Turnkey environment** – `plume_nav_sim.make_env()` returns a Gymnasium-compatible environment with sensible defaults. Optional operational logging is available via `plume_nav_sim.logging.loguru_bootstrap.setup_logging`; analysis data capture is a separate workflow (see "Operational logging vs. data capture" below).
+- **Turnkey environment** – `plume_nav_sim.make_env()` returns a Gymnasium-compatible environment with sensible defaults. Optional operational logging is available via `plume_nav_sim.logging.setup_logging`; analysis data capture is a separate workflow (see "Operational logging vs. data capture" below).
 - **Deterministic runs** – Centralized seeding utilities keep experiments reproducible across machines and CI.
 - **Pluggable architecture** – Swap observation, reward, action, or plume components via dependency injection.
 - **Research data workflow** – Built-in metadata export and curated examples accelerate analysis pipelines.
@@ -42,13 +50,85 @@ print(info["agent_xy"])  # starting position
   env = gym.make(ENV_ID, action_type="oriented")
   ```
 
-- **Component knobs**: pass string options such as `observation_type="antennae"`
+- **Component knobs**: pass string options such as `action_type="run_tumble"` or `observation_type="antennae"`
+- **Wind sensing (optional)**: request `observation_type="wind_vector"` and either set `enable_wind=True` or pass `wind_direction_deg`/`wind_speed`/`wind_vector`; omit to keep odor-only behavior unchanged.
 - **See also**: `src/backend/examples/quickstart.py` (writes `quickstart.gif` by default)
+
+### Data zoo (registry-backed movie plumes)
+
+- Curated datasets:
+  - `colorado_jet_v1` v1.0.0 → Zenodo record 4971113 (Dryad DOI 10.5061/dryad.g27mq71) PLIF acetone plume (`a0004_nearbed_10cm_s.zarr`), license `CC-BY-4.0`, cite Connor, McHugh, & Crimaldi 2018 (Experiments in Fluids).
+  - `rigolli_dns_nose_v1` v1.0.0 → Zenodo 15469831 DNS turbulent plume (nose level), license `CC-BY-4.0`, cite Rigolli et al. 2022 (eLife, DOI 10.7554/eLife.76989).
+  - `rigolli_dns_ground_v1` v1.0.0 → Zenodo 15469831 DNS turbulent plume (ground level), license `CC-BY-4.0`, cite Rigolli et al. 2022 (eLife, DOI 10.7554/eLife.76989).
+  - `emonet_smoke_v1` v1.0.0 → Dryad smoke plume video (walking Drosophila), license `CC0-1.0`, cite Demir et al. 2020 (eLife, DOI 10.7554/eLife.57524).
+- Cache root defaults to `~/.cache/plume_nav_sim/data_zoo/<cache_subdir>/<version>/<expected_root>`; override with `movie_cache_root` or CLI `--movie-cache-root`.
+- Config usage (registry resolves path and verifies checksum):
+
+  ```python
+  from plume_nav_sim.compose import SimulationSpec, prepare
+
+  sim = SimulationSpec(
+      plume="movie",
+      movie_dataset_id="colorado_jet_v1",
+      movie_auto_download=True,
+  )
+  env, _ = prepare(sim)
+  ```
+
+- CLI usage (plug-and-play demo):
+
+  ```bash
+  python plug-and-play-demo/main.py \
+    --plume movie \
+    --movie-dataset-id colorado_jet_v1 \
+    --movie-auto-download
+  ```
+
+- Notes on `emonet_smoke_v1` (Dryad) access + preprocessing:
+  - Some Dryad API endpoints can return `401 Unauthorized` for automated downloads.
+  - If auto-download fails, manually download the large frames `.mat` artifact and symlink it into the Data Zoo cache.
+  - The Emonet ingest performs background subtraction + auto-trimming of initial baseline frames (configurable in `EmonetSmokeIngest`).
+  - For local analysis (not committed), you can use the helper script `local_scripts/emonet_mean_intensity.py` to compute a background-subtracted mean-intensity trace and estimate smoke onset.
+
+- Attribution and new-entry workflow (checksums, ingest specs) are documented in `src/backend/docs/plume_types.md`.
+
+#### DataCite-compliant metadata
+
+All Data Zoo entries include [DataCite 4.5](https://schema.datacite.org/)-compliant metadata for interoperability with Zenodo, Figshare, and other DOI registries:
+
+```python
+from plume_nav_sim.data_zoo import DATASET_REGISTRY
+
+entry = DATASET_REGISTRY["emonet_smoke_v1"]
+
+# Structured creators with ORCIDs
+for creator in entry.metadata.creators:
+    print(f"{creator.name} ({creator.orcid})")
+
+# Export for Zenodo upload
+datacite_json = entry.metadata.to_datacite()
+```
+
+For simulation-generated datasets, use `SimulationMetadata`:
+
+```python
+from plume_nav_sim.data_zoo import SimulationMetadata
+
+meta = SimulationMetadata.from_config(
+    title="My Plume Simulation (1000 episodes)",
+    creator_name="Your Name",
+    config=hydra_cfg,  # auto-hashed for reproducibility
+    seed=42,
+    software_version="0.1.0",
+)
+```
+
+This captures software provenance, config hash, random seed, and parameters — ready for publication to Zenodo with proper citation metadata.
 
 ## 3. Progressive Customization
 
 | Stage | Goal | Example |
-|-------|------|---------|
+| --- | --- | --- |
 | **Customize** | Tune built-ins with typed kwargs | `examples/custom_configuration.py` |
 | **Extend** | Inject custom components (reward, observation, plume) | `examples/custom_components.py` |
 | **Reproduce** | Capture seeds and metadata for benchmarking | `examples/reproducibility.py` |
@@ -106,7 +186,7 @@ flake8 src/backend/plume_nav_sim \
 
 ### Debugger (Qt MVP)
 
-A minimal Qt debugger is available for stepping the environment and viewing RGB frames. It now includes a dockable, information-only Inspector.
+A minimal Qt debugger is available for stepping the environment and viewing RGB frames. It includes dockable tools for inspection and configuration (Inspector, Live Config, Replay Config) plus optional frame overlays (purely visual).
 
 - Install Qt toolkit into your conda env:
 
@@ -122,8 +202,9 @@ make debugger ENV_NAME=plume-nav-sim
 
 Controls:
 
-- Start/Pause, Step, Reset with seed; adjust interval (ms)
-- Keyboard: Space (toggle run), N (step), R (reset)
+- Start/Pause, Step, Step Back, Reset with seed; toggle Explore (policy explore=True) and adjust interval (ms)
+- Keyboard: Space (toggle run), N (step), B (step back), R (reset)
+- View menu: toggle Inspector, Live Config, Replay Config, and Frame overlays
 
 Policies:
 
@@ -140,6 +221,23 @@ Inspector (information-only):
     - No side effects: the inspector never calls `select_action` and never influences the simulation.
   - Observation: shows observation shape and min/mean/max summary.
 - The Inspector is intentionally read-only; controls that change simulation behavior (start/pause/step, reset, policy selection) remain in the main toolbar.
+
+Live configuration:
+
+- Dockable window (View → Live Config) provides presets and an editable `DebuggerConfig` (seed, plume, action_type, max_steps, movie_dataset_id/movie_path). Click Apply to reinitialize the live environment.
+
+Replay configuration (read-only):
+
+- Dockable window (View → Replay Config) shows the resolved replay environment settings (including the resolved/inferred action_type) for the currently loaded run.
+
+#### Replay captured runs
+
+- Point the debugger at a run directory produced by `plume-nav-capture` (expects `run.json`, `steps*.jsonl.gz` shards and/or `steps/episodes.parquet` alongside `episodes*.jsonl.gz`).
+- Loader hard-validates schema_version `1.0.0` and consistent `run_id` across `run.json`, steps, and episodes; multipart shards (`*.partNNNN.jsonl.gz`) are accepted and merged in order.
+- Replay reconstructs the environment from recorded `env_config`, inferring `max_steps` from truncation markers when missing; RGB frames require `enable_rendering=True` in the capture.
+- Replay resolves `action_type` from the run metadata when present; otherwise it infers it from recorded steps and surfaces divergences as explicit errors (see Replay Config).
+- Headless regression coverage lives in `tests/debugger/test_replay_loader_engine.py` (gz/multipart/Parquet loader paths plus ReplayEngine reward/position/done parity and rendering). Qt-driven UI coverage remains in `tests/debugger/test_replay_driver.py` and skips when bindings are absent.
+- Version mismatches are treated as hard failures to avoid mixing incompatible capture formats.
 
 Provider Plugins (ODC):
 
@@ -190,8 +288,8 @@ ODC Provider Contract (Developer Guide):
 
 Preferences & Config:
 
-- Edit → Preferences provides toggles for: Show pipeline, Show observation preview, Show sparkline, Default interval (ms), Theme (light/dark)
-- Settings persist via QSettings and mirror to JSON at `~/.config/plume-nav-sim/debugger.json` if present.
+- Edit → Preferences provides toggles for: Show pipeline, Show observation preview, Show sparkline, Show frame overlays, Default interval (ms), Theme (light/dark)
+- Settings persist via QSettings and are also written to JSON at `~/.config/plume_nav_sim/debugger.json` (legacy `~/.config/plume-nav-sim/debugger.json` is migrated).
 - Strict provider-only mode is not configurable.
 
 ### Jupyter notebooks (interactive plots)
@@ -227,7 +325,6 @@ Troubleshooting “'widget' is not a recognised backend name”:
 - Clear any forced backend: `import os; os.environ.pop('MPLBACKEND', None)` in the first cell.
 
 - Fallback safely when ipympl is missing
-  -
 
   ```python
   import matplotlib as mpl
@@ -294,13 +391,12 @@ These policies are referenced by dataset ingest and loader components to ensure 
 
 ```python
 import plume_nav_sim as pns
-from plume_nav_sim.utils.seeding import SeedManager
+from plume_nav_sim._compat import SeedManager
 
 manager = SeedManager()
 base_seed = 2025
-episode_seed = manager.generate_episode_seed(
-    base_seed, episode_number=0, experiment_id="repro"
-)
+manager.seed(base_seed)
+episode_seed = int(manager.rng.integers(0, 2**32 - 1))
 
 env = pns.make_env()
 obs, info = env.reset(seed=episode_seed)
@@ -369,7 +465,7 @@ MIT License. See [LICENSE](LICENSE).
 - Enable loguru sinks and stdlib bridge:
 
 ```python
-from plume_nav_sim.logging.loguru_bootstrap import setup_logging
+from plume_nav_sim.logging import setup_logging
 
 # Minimal ops logging setup
 setup_logging(level="INFO", console=True)

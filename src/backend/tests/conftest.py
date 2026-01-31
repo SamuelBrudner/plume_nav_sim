@@ -11,7 +11,6 @@ import logging
 import os
 import queue
 import threading
-import time
 import warnings
 
 import matplotlib
@@ -35,7 +34,6 @@ __all__ = [
     "MemoryMonitor",
     "DUAL_MODE_TEST_GRID_SIZES",
     "INTEGRATION_TEST_SEEDS",
-    "PerformanceTracker",
     "MemoryMonitor",
 ]
 

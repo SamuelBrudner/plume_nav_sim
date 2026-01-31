@@ -10,10 +10,10 @@ This module provides:
 All helpers are dependency-light and safe to import in headless contexts.
 """
 
-from typing import Any, Dict, List, Literal, Optional, Sequence, Union
+from typing import Any, Dict, List, Literal, Optional, Sequence
 
 import numpy as _np
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from .models import ActionInfo, ObservationInfo, PipelineInfo
 from .schemas import ActionInfoSchema, ObservationInfoSchema, PipelineInfoSchema

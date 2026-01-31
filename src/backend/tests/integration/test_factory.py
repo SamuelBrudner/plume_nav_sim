@@ -50,6 +50,16 @@ class TestComponentEnvironmentFactory:
         assert env.action_space.n == 3
         env.close()
 
+    def test_run_tumble_actions(self):
+        """Test: Factory creates run/tumble action environment."""
+        env = create_component_environment(action_type="run_tumble")
+
+        # Run/tumble actions have 2 actions (RUN, TUMBLE)
+        assert env.action_space.n == 2
+        obs, _ = env.reset()
+        assert obs is not None
+        env.close()
+
     def test_concentration_observation(self):
         """Test: Factory creates concentration sensor."""
         env = create_component_environment(observation_type="concentration")
@@ -136,7 +146,13 @@ class TestComponentEnvironmentFactory:
 
     def test_invalid_action_type_raises_error(self):
         """Test: Factory raises error for invalid action_type."""
-        with pytest.raises(ValueError, match="Invalid action_type"):
+        with pytest.raises(
+            ValueError,
+            match=(
+                "Invalid action_type: invalid\\. Must be 'discrete', 'oriented', "
+                "or 'run_tumble'."
+            ),
+        ):
             create_component_environment(action_type="invalid")
 
     def test_invalid_observation_type_raises_error(self):

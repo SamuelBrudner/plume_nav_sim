@@ -1,96 +1,39 @@
-"""
-Component-based environment using dependency injection.
-
-This module implements a Gymnasium environment that delegates to injected
-components (ActionProcessor, ObservationModel, RewardFunction) rather than
-using abstract methods. This architecture enables component swapping and
-testing without modifying the environment class.
-
-Contract: environment_state_machine.md
-
-Key Features:
-- Component dependency injection (no inheritance required)
-- Protocol-based interfaces (duck typing)
-- Clean separation of concerns
-- Easy testing and component composition
-
-Architecture:
-    Environment → ActionProcessor (for actions)
-               → ObservationModel (for observations)
-               → RewardFunction (for rewards)
-               → ConcentrationField (plume model)
-"""
-
 from __future__ import annotations
 
+import contextlib
 import logging
-from enum import Enum
+import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 import gymnasium as gym
 import numpy as np
 
-from ..core.constants import (
+from .._compat import StateError, ValidationError
+from ..constants import (
     AGENT_MARKER_COLOR,
     AGENT_MARKER_SIZE,
     SOURCE_MARKER_COLOR,
     SOURCE_MARKER_SIZE,
 )
-from ..core.geometry import Coordinates, GridSize
-from ..core.state import AgentState
-from ..utils.exceptions import StateError, ValidationError
+from ..core.types import AgentState, Coordinates, GridSize
+from .state import EnvironmentState
 
 if TYPE_CHECKING:
-    from ..interfaces import ActionProcessor, ObservationModel, RewardFunction
-    from ..plume.concentration_field import ConcentrationField
+    from ..interfaces import (
+        ActionProcessor,
+        ObservationModel,
+        RewardFunction,
+        VectorField,
+    )
+    from ..plume.protocol import ConcentrationField
 
 __all__ = ["ComponentBasedEnvironment", "EnvironmentState"]
 
 logger = logging.getLogger(__name__)
 
 
-class EnvironmentState(Enum):
-    """Formal states for Environment lifecycle.
-
-    Contract: environment_state_machine.md - State Definition
-    """
-
-    CREATED = "created"  # After __init__(), must reset() before step()
-    READY = "ready"  # After reset(), can step()
-    TERMINATED = "terminated"  # Episode ended (goal reached)
-    TRUNCATED = "truncated"  # Episode timeout
-    CLOSED = "closed"  # Resources released, terminal state
-
-
 class ComponentBasedEnvironment(gym.Env):
-    """
-    Gymnasium environment using component dependency injection.
-
-    This environment delegates to injected components rather than using
-    abstract methods, enabling flexible composition and testing.
-
-    Contract: environment_state_machine.md
-
-    Components (injected):
-        action_processor: Processes actions and computes new agent states
-        observation_model: Generates observations from environment state
-        reward_function: Computes rewards based on state transitions
-        concentration_field: Plume model for odor concentration
-
-    Attributes:
-        action_space: From action_processor.action_space
-        observation_space: From observation_model.observation_space
-        grid_size: Spatial bounds for the environment
-        max_steps: Episode step limit
-        goal_location: Target position for agent
-        goal_radius: Success threshold distance
-
-    State Machine:
-        CREATED --reset()--> READY --step()--> {READY, TERMINATED, TRUNCATED}
-        {TERMINATED, TRUNCATED} --reset()--> READY
-        * --close()--> CLOSED
-    """
-
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(
@@ -100,40 +43,23 @@ class ComponentBasedEnvironment(gym.Env):
         observation_model: ObservationModel,
         reward_function: RewardFunction,
         concentration_field: ConcentrationField,
+        wind_field: Optional[VectorField] = None,
         grid_size: GridSize,
         max_steps: int = 1000,
         goal_location: Coordinates,
         goal_radius: float = 5.0,
         start_location: Optional[Coordinates] = None,
         render_mode: Optional[str] = None,
+        _warn_deprecated: bool = True,
     ):
-        """
-        Initialize environment with injected components.
-
-        Contract: environment_state_machine.md - __init__() preconditions
-
-        Args:
-            action_processor: Component for action processing
-            observation_model: Component for observation generation
-            reward_function: Component for reward calculation
-            concentration_field: Plume model for odor
-            grid_size: Spatial bounds (width, height)
-            max_steps: Episode step limit
-            goal_location: Target position
-            goal_radius: Success threshold
-            start_location: Initial agent position (default: grid center)
-            render_mode: Visualization mode ('rgb_array' or 'human')
-
-        Raises:
-            ValidationError: If parameters invalid
-            TypeError: If components don't satisfy protocols
-
-        Postconditions:
-            - self._state = CREATED
-            - action_space and observation_space assigned from components
-            - No episode active
-        """
         super().__init__()
+        if _warn_deprecated:
+            warnings.warn(
+                "ComponentBasedEnvironment is deprecated and will be removed in a future "
+                "release. Use PlumeEnv or create_plume_env instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         # Contract: environment_state_machine.md - P1, P2, P3
         if max_steps <= 0:
@@ -152,6 +78,7 @@ class ComponentBasedEnvironment(gym.Env):
         self._observation_model = observation_model
         self._reward_function = reward_function
         self._concentration_field = concentration_field
+        self._wind_field = wind_field
 
         # Gymnasium spaces from components
         # Contract: environment_state_machine.md - C5, C6
@@ -190,29 +117,6 @@ class ComponentBasedEnvironment(gym.Env):
     def reset(
         self, *, seed: Optional[int] = None, options: Optional[dict] = None
     ) -> tuple[Any, dict]:
-        """
-        Begin new episode, transition to READY state.
-
-        Contract: environment_state_machine.md - reset() contract
-
-        Args:
-            seed: RNG seed for reproducibility
-            options: Additional reset options (unused)
-
-        Returns:
-            observation: From observation_model.get_observation()
-            info: Episode metadata
-
-        Raises:
-            StateError: If state == CLOSED
-            ValidationError: If seed invalid
-
-        Postconditions:
-            - self._state = READY
-            - self._step_count = 0
-            - self._episode_count incremented
-            - Agent positioned at start_location
-        """
         # Contract: environment_state_machine.md - P1
         if self._state == EnvironmentState.CLOSED:
             raise StateError("Cannot reset closed environment")
@@ -239,36 +143,7 @@ class ComponentBasedEnvironment(gym.Env):
         return observation, info
 
     def step(self, action: Any) -> tuple[Any, float, bool, bool, dict]:
-        """
-        Execute action, advance one timestep.
-
-        Contract: environment_state_machine.md - step() contract
-
-        Args:
-            action: Action from action_space
-
-        Returns:
-            observation: Next observation
-            reward: Reward for this transition
-            terminated: Whether episode ended (goal reached)
-            truncated: Whether episode timed out
-            info: Step metadata
-
-        Raises:
-            StateError: If state not READY
-            ValidationError: If action invalid
-
-        Postconditions:
-            - self._step_count incremented
-            - self._state may transition to TERMINATED or TRUNCATED
-        """
-        # Contract: environment_state_machine.md - P1
-        if self._state == EnvironmentState.CREATED:
-            raise StateError("Must call reset() before step()")
-        if self._state == EnvironmentState.CLOSED:
-            raise StateError("Cannot step closed environment")
-        if self._state != EnvironmentState.READY:
-            raise StateError("Environment must be in READY state to step; call reset()")
+        self._ensure_ready_for_step()
 
         # Validate action
         # Contract: environment_state_machine.md - P2
@@ -286,13 +161,7 @@ class ComponentBasedEnvironment(gym.Env):
         self._step_count += 1
 
         # Advance dynamic plume state for this step if supported
-        try:
-            adv = getattr(self._concentration_field, "advance_to_step", None)
-            if callable(adv):
-                adv(self._step_count)
-        except Exception:
-            # Defensive: optional dynamic hook
-            pass
+        self._advance_dynamic_fields()
 
         # Compute reward
         # Delegation to RewardFunction
@@ -314,7 +183,41 @@ class ComponentBasedEnvironment(gym.Env):
         # Update agent state
         self._agent_state = new_agent_state
 
-        # Update state machine
+        self._update_state_after_step(terminated=terminated, truncated=truncated)
+
+        # Generate observation
+        # Delegation to ObservationModel
+        env_state_dict = self._build_env_state_dict()
+        observation = self._observation_model.get_observation(env_state_dict)
+
+        # Build info dict
+        info = self._build_step_info()
+
+        return observation, float(reward), terminated, truncated, info
+
+    def _ensure_ready_for_step(self) -> None:
+        # Contract: environment_state_machine.md - P1
+        if self._state == EnvironmentState.CREATED:
+            raise StateError("Must call reset() before step()")
+        if self._state == EnvironmentState.CLOSED:
+            raise StateError("Cannot step closed environment")
+        if self._state != EnvironmentState.READY:
+            raise StateError("Environment must be in READY state to step; call reset()")
+
+    def _advance_dynamic_field(self, field: Any) -> None:
+        try:
+            adv = getattr(field, "advance_to_step", None)
+            if callable(adv):
+                adv(self._step_count)
+        except Exception:
+            # Defensive: optional dynamic hook
+            pass
+
+    def _advance_dynamic_fields(self) -> None:
+        self._advance_dynamic_field(self._concentration_field)
+        self._advance_dynamic_field(self._wind_field)
+
+    def _update_state_after_step(self, *, terminated: bool, truncated: bool) -> None:
         if terminated:
             self._state = EnvironmentState.TERMINATED
             self._agent_state.goal_reached = True
@@ -329,13 +232,8 @@ class ComponentBasedEnvironment(gym.Env):
                 f"max_steps={self.max_steps} reached"
             )
 
-        # Generate observation
-        # Delegation to ObservationModel
-        env_state_dict = self._build_env_state_dict()
-        observation = self._observation_model.get_observation(env_state_dict)
-
-        # Build info dict
-        info = {
+    def _build_step_info(self) -> dict[str, Any]:
+        return {
             "step_count": self._step_count,
             "agent_position": (
                 self._agent_state.position.x,
@@ -343,8 +241,6 @@ class ComponentBasedEnvironment(gym.Env):
             ),
             "distance_to_goal": self._distance_to_goal(self._agent_state.position),
         }
-
-        return observation, float(reward), terminated, truncated, info
 
     def _sample_random_start_location(self) -> Coordinates:
         rng = getattr(self, "_rng", None)
@@ -357,17 +253,6 @@ class ComponentBasedEnvironment(gym.Env):
         return Coordinates(x=start_x, y=start_y)
 
     def close(self) -> None:
-        """
-        Release resources, transition to CLOSED state.
-
-        Contract: environment_state_machine.md - close() contract
-
-        Postconditions:
-            - self._state = CLOSED
-            - Subsequent operations raise StateError
-
-        Idempotent: Multiple calls safe
-        """
         if self._state == EnvironmentState.CLOSED:
             return  # Idempotent
 
@@ -379,14 +264,6 @@ class ComponentBasedEnvironment(gym.Env):
         )
 
     def render(self) -> Optional[np.ndarray]:
-        """
-        Generate visualization composed of the concentration field with agent/source markers.
-
-        Contract: environment_state_machine.md - render() contract
-
-        Returns:
-            RGB array if render_mode='rgb_array', else None
-        """
         if self.render_mode != "rgb_array":
             return None
 
@@ -450,14 +327,20 @@ class ComponentBasedEnvironment(gym.Env):
                 pass
 
     def _reset_concentration_dynamic_state(self) -> None:
-        """Allow concentration field to reset any dynamic state."""
-        try:
-            on_reset = getattr(self._concentration_field, "on_reset", None)
+        """Allow concentration and wind fields to reset any dynamic state."""
+        with contextlib.suppress(Exception):
+            reset = getattr(self._concentration_field, "reset", None)
+            if callable(reset):
+                reset(self._seed)
+            else:
+                on_reset = getattr(self._concentration_field, "on_reset", None)
+                if callable(on_reset):
+                    on_reset()
+        with contextlib.suppress(Exception):
+            wind_reset = getattr(self, "_wind_field", None)
+            on_reset = getattr(wind_reset, "on_reset", None)
             if callable(on_reset):
                 on_reset()
-        except Exception:
-            # Defensive: dynamic hooks are optional
-            pass
 
     def _initial_observation_and_info(self) -> tuple[Any, dict]:
         """Generate initial observation and info dict."""
@@ -482,22 +365,65 @@ class ComponentBasedEnvironment(gym.Env):
         field = getattr(self, "_concentration_field", None)
         field_array = getattr(field, "field_array", None)
         if isinstance(field_array, np.ndarray) and field_array.size == height * width:
+            if not hasattr(self, "_render_norm_range"):
+                self._render_norm_range = None
+
             flat = field_array.reshape(-1)
             finite_mask = np.isfinite(flat)
             if finite_mask.any():
-                finite_vals = flat[finite_mask]
-                field_min = float(finite_vals.min())
-                field_max = float(finite_vals.max())
-                normalized = np.zeros_like(flat, dtype=np.float32)
-                if field_max > field_min:
-                    span = field_max - field_min
-                    normalized[finite_mask] = (finite_vals - field_min) / span
-                normalized_2d = normalized.reshape(field_array.shape)
+                normalized_2d = self._extracted_from__render_field_grayscale_14(
+                    flat, finite_mask, field, field_array
+                )
             else:
                 normalized_2d = np.zeros_like(field_array, dtype=np.float32)
 
-            grayscale = (normalized_2d * 255.0).astype(np.uint8)
+            grayscale = (np.clip(normalized_2d, 0.0, 1.0) * 255.0).astype(np.uint8)
             canvas[:, :, :] = grayscale[:, :, None]
+
+    # TODO Rename this here and in `_render_field_grayscale`
+    def _extracted_from__render_field_grayscale_14(
+        self, flat, finite_mask, field, field_array
+    ):
+        finite_vals = flat[finite_mask]
+        norm_range = getattr(self, "_render_norm_range", None)
+        if norm_range is None:
+            dataset_path = getattr(field, "_dataset_path", None)
+            if isinstance(dataset_path, str) and Path(dataset_path).is_dir():
+                try:
+                    import zarr
+
+                    root = zarr.open_group(dataset_path, mode="r")
+                    stats = root.attrs.get("concentration_stats")
+                    if isinstance(stats, dict):
+                        quantiles = stats.get("quantiles")
+                        stats_max = stats.get("max")
+                        vmin = 0.0
+                        vmax = (
+                            float(
+                                quantiles.get("q999", quantiles.get("q99", stats_max))
+                            )
+                            if isinstance(quantiles, dict)
+                            else float(stats_max)
+                        )
+                        if np.isfinite(vmin) and np.isfinite(vmax) and vmax > vmin:
+                            norm_range = (vmin, vmax)
+                except Exception:
+                    norm_range = None
+
+            if norm_range is not None:
+                self._render_norm_range = norm_range
+
+        if norm_range is not None:
+            field_min, field_max = float(norm_range[0]), float(norm_range[1])
+        else:
+            field_min = float(finite_vals.min())
+            field_max = float(finite_vals.max())
+        normalized = np.zeros_like(flat, dtype=np.float32)
+        if field_max > field_min:
+            span = field_max - field_min
+            normalized[finite_mask] = (finite_vals - field_min) / span
+        result = normalized.reshape(field_array.shape)
+        return result
 
     def _draw_source_marker(self, canvas: np.ndarray, height: int, width: int) -> None:
         """Draw source marker and optional dashed goal radius."""
@@ -568,27 +494,18 @@ class ComponentBasedEnvironment(gym.Env):
     def _build_env_state_dict(
         self, agent_state: Optional[AgentState] = None
     ) -> dict[str, Any]:
-        """
-        Build environment state dictionary for component protocols.
-
-        Contract: observation_model_interface.md, reward_function_interface.md
-
-        Args:
-            agent_state: Override current agent state (for lookahead)
-
-        Returns:
-            Dictionary with required keys for component protocols
-        """
         state = agent_state or self._agent_state
 
         return {
             "agent_state": state,
             "plume_field": self._concentration_field.field_array,  # Numpy array for ObservationModel
             "concentration_field": self._concentration_field,  # Full object (if needed)
+            "wind_field": self._wind_field,
             "goal_location": self.goal_location,
             "grid_size": self.grid_size,
             "step_count": self._step_count,
             "max_steps": self.max_steps,
+            "rng": getattr(self, "_rng", None),
         }
 
     def _check_goal_reached(self, position: Coordinates) -> bool:

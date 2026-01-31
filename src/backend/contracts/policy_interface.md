@@ -11,8 +11,8 @@
 
 This contract references types defined in other contracts:
 
-- `ActionType`: Action representation compatible with `gymnasium` spaces. For the default oriented grid, `int` in Discrete(3).
-- `ObservationType`: Typically `np.ndarray` (Box), may be composite (Dict/Tuple) depending on environment observation model.
+- `ActionType`: Action representation compatible with `gymnasium` spaces. Matches `action_space` (e.g., `int` for `Discrete`, `np.ndarray` for `Box/MultiDiscrete`, dict/tuple for composite spaces).
+- `ObservationType`: Matches observation model outputs: `np.ndarray` (Box), `dict` (Dict), or `tuple` (Tuple) depending on the configured observation space.
 
 ---
 

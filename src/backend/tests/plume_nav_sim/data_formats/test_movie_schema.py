@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from plume_nav_sim._compat import ValidationError
 from plume_nav_sim.data_formats.movie_schema import (
     ATTR_EXTENT,
     ATTR_FPS,
@@ -9,7 +10,6 @@ from plume_nav_sim.data_formats.movie_schema import (
     ATTR_PIXEL_TO_GRID,
     _require_attr,
 )
-from plume_nav_sim.utils.exceptions import ValidationError
 
 
 def _make_attrs(**overrides):

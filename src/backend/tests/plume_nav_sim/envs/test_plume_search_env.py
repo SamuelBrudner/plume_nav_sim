@@ -1,24 +1,28 @@
-"""Tests for PlumeSearchEnv wrapper behavior.
+"""Tests for PlumeEnv behavior.
 
 Focus:
-- rgb_array render fallback always returns an ndarray even when the core env
-  does not produce a frame (returns None).
-- wrapper seeds and delegates correctly (reproducible trajectories across
-  instances with same seed and config).
-- wrapper attributes reflect normalized constructor arguments, and reward
+- rgb_array rendering returns an ndarray regardless of configured render_mode.
+- seeded resets produce reproducible trajectories across instances.
+- constructor arguments are normalized onto public attributes, and reward
   semantics expose immediate reward while tracking cumulative reward in info.
 """
 
 import numpy as np
 
-from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
+from plume_nav_sim.envs.plume_env import PlumeEnv
 
-from . import assert_rendering_output_valid
+
+def assert_rendering_output_valid(env: PlumeEnv, mode: str = "rgb_array") -> None:
+    """Minimal rendering validation for rgb_array output."""
+    frame = env.render(mode=mode)
+    assert isinstance(frame, np.ndarray)
+    assert frame.ndim == 3 and frame.shape[-1] == 3
+    assert frame.dtype == np.uint8
 
 
 def test_rgb_array_fallback_returns_ndarray_small_grid():
-    """When core render returns None, wrapper returns zero ndarray (H,W,3)."""
-    env = PlumeSearchEnv(grid_size=(8, 8))  # default render_mode=None
+    """rgb_array render returns ndarray when render_mode is unset."""
+    env = PlumeEnv(grid_size=(8, 8))  # default render_mode=None
     try:
         # Utility asserts ndarray with 3 channels and dtype uint8
         assert_rendering_output_valid(env, mode="rgb_array")
@@ -27,8 +31,8 @@ def test_rgb_array_fallback_returns_ndarray_small_grid():
 
 
 def test_rgb_array_fallback_with_human_mode_configured():
-    """Even if configured for human mode, rgb_array requests return ndarray fallback."""
-    env = PlumeSearchEnv(grid_size=(16, 16), render_mode="human")
+    """Even if configured for human mode, rgb_array requests return ndarray."""
+    env = PlumeEnv(grid_size=(16, 16), render_mode="human")
     try:
         frame = env.render(mode="rgb_array")
         assert isinstance(frame, np.ndarray)
@@ -39,9 +43,9 @@ def test_rgb_array_fallback_with_human_mode_configured():
 
 
 def test_wrapper_attribute_reflection_and_normalization():
-    """Ensure wrapper attributes mirror normalized constructor arguments."""
+    """Ensure attributes mirror normalized constructor arguments."""
     # goal_radius=0 should normalize to a small positive epsilon
-    env = PlumeSearchEnv(
+    env = PlumeEnv(
         grid_size=(20, 30),
         source_location=(5, 10),
         max_steps=50,
@@ -60,8 +64,8 @@ def test_wrapper_attribute_reflection_and_normalization():
 def test_seeded_reproducibility_same_trajectory():
     """Two instances with same config and seed follow identical trajectories."""
     cfg = dict(grid_size=(32, 32), source_location=(16, 16), max_steps=25)
-    env1 = PlumeSearchEnv(**cfg)
-    env2 = PlumeSearchEnv(**cfg)
+    env1 = PlumeEnv(**cfg)
+    env2 = PlumeEnv(**cfg)
 
     try:
         obs1, info1 = env1.reset(seed=1234)
@@ -96,7 +100,7 @@ def test_seeded_reproducibility_same_trajectory():
 
 
 def test_step_returns_immediate_reward_and_tracks_cumulative_in_info():
-    env = PlumeSearchEnv(grid_size=(16, 16), source_location=(8, 8), max_steps=10)
+    env = PlumeEnv(grid_size=(16, 16), source_location=(8, 8), max_steps=10)
     try:
         _, info = env.reset(seed=7)
         assert info.get("total_reward") == 0.0

@@ -1,4 +1,3 @@
-import numpy as np
 import pytest
 
 from plume_nav_sim.envs.plume_search_env import create_plume_search_env

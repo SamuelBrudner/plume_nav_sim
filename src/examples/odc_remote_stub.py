@@ -6,9 +6,6 @@ This demonstrates how a debugger process could proxy ODC methods to a remote
 provider process. Here we simulate the remote side with an in-process handler.
 """
 
-from typing import Any, Dict
-
-from plume_nav_debugger.odc.models import ActionInfo, PipelineInfo
 from plume_nav_debugger.odc.remote import CallableTransport, RemoteProvider
 from plume_nav_debugger.odc.wire import ODCRequest, ODCResponse
 

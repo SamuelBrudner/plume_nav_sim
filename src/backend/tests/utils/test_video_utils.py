@@ -5,7 +5,7 @@ import types
 import numpy as np
 import pytest
 
-from plume_nav_sim.utils.video import save_video_events, save_video_frames
+from plume_nav_sim.plume.video import save_video_events, save_video_frames
 
 
 class _StubIIO:

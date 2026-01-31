@@ -6,10 +6,12 @@ from typing import Optional, Tuple
 
 import numpy as np
 
+CHUNKS_TYX: tuple[int, int, int] = (8, 64, 64)
+
 
 def _try_import_h5py():
     try:
-        import h5py  # type: ignore
+        import h5py
 
         return h5py
     except Exception as e:  # pragma: no cover - exercised when media extras missing
@@ -32,13 +34,6 @@ def _git_sha() -> Optional[str]:
 
 @dataclass
 class H5MovieIngestConfig:
-    """Configuration for converting an HDF5 plume movie into a Zarr dataset.
-
-    The fields mirror the CLI-style options used by ingest helpers and tests,
-    and are kept deliberately small so that ingest_h5_movie can be exercised
-    directly from Python as well as via DVC/CI pipelines.
-    """
-
     input: Path
     dataset: str
     output: Path
@@ -48,6 +43,7 @@ class H5MovieIngestConfig:
     pixel_to_grid: Optional[Tuple[float, float]] = None
     origin: Optional[Tuple[float, float]] = None
     extent: Optional[Tuple[float, float]] = None
+    source_location_px: Optional[Tuple[int, int]] = None
     normalize: bool = False
     chunk_t: Optional[int] = None
 
@@ -159,6 +155,15 @@ def _create_zarr_and_write_attrs(
         "extent": list(extent),
         "normalize": bool(cfg.normalize),
     }
+    if cfg.source_location_px is not None:
+        grp.attrs["source_location_px"] = [
+            int(cfg.source_location_px[0]),
+            int(cfg.source_location_px[1]),
+        ]
+        grp.attrs["ingest_args"]["source_location_px"] = [
+            int(cfg.source_location_px[0]),
+            int(cfg.source_location_px[1]),
+        ]
     return arr
 
 
@@ -194,7 +199,7 @@ def _write_frames_to_zarr(
 
 def _try_import_zarr():
     try:
-        import zarr as _zarr  # type: ignore
+        import zarr as _zarr
 
         return _zarr
     except Exception as e:  # pragma: no cover - exercised when media extras missing
@@ -203,13 +208,46 @@ def _try_import_zarr():
         ) from e
 
 
+def _create_zarr_array(
+    store_path: Path,
+    *,
+    name: str,
+    shape: tuple[int, int, int],
+    dtype: str,
+    chunks: tuple[int, int, int],
+    overwrite: bool,
+    extra_attrs: Optional[dict],
+):
+    compressor = None
+    try:
+        from numcodecs import Blosc
+
+        compressor = Blosc(cname="zstd", clevel=3, shuffle=1)
+    except Exception:
+        compressor = None
+
+    _zarr = _try_import_zarr()
+    grp = _zarr.open_group(store_path, mode="a")
+    if overwrite and name in grp:
+        del grp[name]
+    arr = grp.require_dataset(
+        name,
+        shape=shape,
+        dtype=dtype,
+        chunks=chunks,
+        compressor=compressor,
+    )
+    if extra_attrs:
+        arr.attrs.update(extra_attrs)
+    return arr
+
+
 def ingest_h5_movie(cfg: H5MovieIngestConfig) -> Path:
     """Convert an HDF5 plume movie into a Zarr dataset compatible with MoviePlumeField."""
 
     h5py = _try_import_h5py()
     _zarr = _try_import_zarr()
 
-    from ..storage import CHUNKS_TYX, create_zarr_array
     from ..video.schema import DIMS_TYX, VARIABLE_NAME, VideoPlumeAttrs, validate_attrs
     from .manifest import build_provenance_manifest, write_manifest
 
@@ -235,7 +273,7 @@ def ingest_h5_movie(cfg: H5MovieIngestConfig) -> Path:
 
         arr = _create_zarr_and_write_attrs(
             _zarr,
-            create_zarr_array,
+            _create_zarr_array,
             output_path,
             t,
             size_y,

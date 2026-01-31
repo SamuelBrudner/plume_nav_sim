@@ -11,28 +11,23 @@ reproducibility validation for the plume_nav_sim Gymnasium environment.
 
 import argparse  # >=3.10 - Command-line interface for advanced example customization and parameter control
 import concurrent.futures  # >=3.10 - Parallel processing for advanced performance testing and multi-environment validation
-import contextlib  # >=3.10 - Context management utilities for resource handling and advanced error management patterns
 import json  # >=3.10 - JSON serialization for configuration and results export
 import pathlib  # >=3.10 - Path handling for output directory management and file operations
 import statistics  # >=3.10 - Statistical analysis of reproducibility validation and performance trend analysis
 import sys  # >=3.10 - System interface for advanced error handling and script execution management
 import time  # >=3.10 - High-precision timing measurements and performance benchmarking for advanced monitoring integration
-import warnings  # >=3.10 - Warning management for development and production environments
 from typing import (  # >=3.10 - Advanced type hints for comprehensive type safety
     Any,
     Dict,
     List,
     Optional,
-    Tuple,
-    Union,
 )
-
-import matplotlib  # >=3.9.0 - Backend management and configuration for cross-platform compatibility
-import matplotlib.pyplot as plt  # >=3.9.0 - Advanced visualization including performance plots, trajectory analysis, and multi-panel figures for comprehensive demonstration
-import numpy as np  # >=2.1.0 - Statistical analysis, trajectory comparison, and advanced numerical computing for reproducibility validation
 
 # External imports with version comments
 import gymnasium as gym  # >=0.29.0 - Advanced Gymnasium framework usage including registry inspection, environment wrapping, and vectorization patterns
+import matplotlib  # >=3.9.0 - Backend management and configuration for cross-platform compatibility
+import matplotlib.pyplot as plt  # >=3.9.0 - Advanced visualization including performance plots, trajectory analysis, and multi-panel figures for comprehensive demonstration
+import numpy as np  # >=2.1.0 - Statistical analysis, trajectory comparison, and advanced numerical computing for reproducibility validation
 
 # Internal imports from configuration management
 from ..config.environment_configs import (
@@ -43,14 +38,9 @@ from ..config.environment_configs import (
     get_available_presets,
 )
 
-# Internal imports from core types and actions
-from ..plume_nav_sim.core.types import Action
-
-# Internal imports from environment system
-from ..plume_nav_sim.envs.plume_search_env import (
-    PlumeSearchEnv,
-    create_plume_search_env,
-)
+# Internal imports from logging and performance monitoring
+from ..plume_nav_sim.logging import configure_development_logging
+from ..plume_nav_sim.logging import get_component_logger as _get_component_logger
 
 # Internal imports from registration system
 from ..plume_nav_sim.registration.register import (
@@ -61,23 +51,35 @@ from ..plume_nav_sim.registration.register import (
     unregister_env,
 )
 
-# Internal imports from exception handling
-from ..plume_nav_sim.utils.exceptions import ConfigurationError, ValidationError
-
-# Internal imports from logging and performance monitoring
-from ..plume_nav_sim.utils.logging import (
-    PerformanceTimer,
-    configure_logging_for_development,
-    get_component_logger,
-)
-
 # Global constants for advanced demonstration configuration
 ADVANCED_DEMO_SEED = 42
 NUM_REPRODUCIBILITY_TESTS = 10
 PERFORMANCE_BASELINE_EPISODES = 5
 STATISTICAL_SIGNIFICANCE_THRESHOLD = 0.01
 
+
 # Global performance tracking and logging setup
+class PerformanceTimer:
+    def __init__(self) -> None:
+        self._start = 0.0
+        self._end = 0.0
+
+    def __enter__(self) -> "PerformanceTimer":
+        self._start = time.perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self._end = time.perf_counter()
+
+    def get_duration_ms(self) -> float:
+        end = self._end or time.perf_counter()
+        return (end - self._start) * 1000.0
+
+
+def get_component_logger(name: str, component_type: Optional[str] = None):
+    return _get_component_logger(name)
+
+
 _logger = get_component_logger("gymnasium_integration", "UTILS")
 _performance_results = {}
 
@@ -98,8 +100,6 @@ def setup_advanced_logging(
     Returns:
         dict: Advanced logging configuration status with enabled features and performance settings
     """
-    global _logger
-
     _logger.info(
         "Setting up advanced logging configuration for Gymnasium integration demonstration"
     )
@@ -117,18 +117,16 @@ def setup_advanced_logging(
 def _extracted_from_setup_advanced_logging_25(
     log_level, enable_performance_logging, enable_file_output, _logger
 ):
-    # Configure development logging using configure_logging_for_development with enhanced parameters
-    logging_config = configure_logging_for_development(
-        log_level=log_level or "INFO",
-        enable_performance_monitoring=enable_performance_logging,
-        enable_file_logging=enable_file_output,
-        component_name="gymnasium_integration",
+    # Configure development logging with basic options
+    logging_config = configure_development_logging(
+        development_log_level=log_level or "INFO",
+        log_to_file=enable_file_output,
     )
 
     # Set up component-specific loggers for environment, registration, and performance monitoring
-    registration_logger = get_component_logger("registration", "CORE")
-    environment_logger = get_component_logger("environment", "CORE")
-    performance_logger = get_component_logger("performance", "UTILS")
+    _ = get_component_logger("registration", "CORE")
+    _ = get_component_logger("environment", "CORE")
+    _ = get_component_logger("performance", "UTILS")
 
     # Configure matplotlib backend for cross-platform compatibility and headless operation
     if not hasattr(matplotlib.get_backend(), "show"):
@@ -416,7 +414,7 @@ def demonstrate_configuration_presets(
                     }
 
                     with PerformanceTimer() as research_timer:
-                        research_config = create_research_scenario(**research_params)
+                        _ = create_research_scenario(**research_params)
 
                     config_results["custom_scenarios"]["research_scenario"] = {
                         "parameters": research_params,
@@ -445,7 +443,7 @@ def demonstrate_configuration_presets(
                     }
 
                     with PerformanceTimer() as benchmark_timer:
-                        benchmark_config = create_benchmark_config(**benchmark_params)
+                        _ = create_benchmark_config(**benchmark_params)
 
                     config_results["custom_scenarios"]["benchmark_scenario"] = {
                         "parameters": benchmark_params,
@@ -509,7 +507,7 @@ def demonstrate_configuration_presets(
                 ]:  # Test first 3 presets for performance
                     try:
                         with PerformanceTimer() as perf_timer:
-                            config = create_preset_config(preset_name)
+                            _ = create_preset_config(preset_name)
                             # Simulate environment creation time
                             time.sleep(0.001)  # Small delay to simulate work
 
@@ -1427,7 +1425,7 @@ def demonstrate_error_handling_patterns(
                     env.close()
                     fallback_env = gym.make(ENV_ID, render_mode="rgb_array")
                     fallback_env.reset()
-                    rgb_output = fallback_env.render()
+                    _ = fallback_env.render()
                     fallback_env.close()
 
                     fallback_successful = True
@@ -1733,7 +1731,7 @@ def demonstrate_advanced_rendering(
                             fallback_env.reset()
 
                             with PerformanceTimer() as fallback_timer:
-                                fallback_output = fallback_env.render()
+                                _ = fallback_env.render()
 
                             human_rendering_result.update(
                                 {
@@ -1838,7 +1836,7 @@ def demonstrate_advanced_rendering(
                 with PerformanceTimer() as batch_timer:
                     for batch_idx in range(batch_test["batch_size"]):
                         with PerformanceTimer() as individual_timer:
-                            render_output = env.render()
+                            _ = env.render()
 
                         batch_test["individual_times"].append(
                             individual_timer.get_duration_ms()
@@ -2065,7 +2063,7 @@ def demonstrate_parallel_environments(
                 _logger.info("Performing sequential vs parallel performance comparison")
 
                 # Execute same number of episodes sequentially for comparison
-                sequential_times = []
+                _ = []
                 sequential_env = environments[0]["env"]
 
                 with PerformanceTimer() as sequential_timer:
@@ -2707,8 +2705,6 @@ def run_gymnasium_integration_demo(
     Returns:
         int: Exit status code with 0 for success, 1 for demonstration failures, and 2 for critical errors
     """
-    global _logger, _performance_results
-
     try:
         # Set up advanced logging configuration using setup_advanced_logging for comprehensive monitoring
         logging_setup = setup_advanced_logging(
@@ -3047,8 +3043,6 @@ def run_gymnasium_integration_demo(
             _logger.info("11. RESOURCE CLEANUP")
             _logger.info("=" * 60)
 
-            cleanup_success = True
-
             try:
                 if test_env is not None:
                     test_env.close()
@@ -3066,13 +3060,11 @@ def run_gymnasium_integration_demo(
                         _logger.warning(
                             f"Environment unregistration failed: {unreg_error}"
                         )
-                        cleanup_success = False
 
                 _logger.info("✓ Resource cleanup completed")
 
             except Exception as cleanup_error:
                 _logger.error(f"Resource cleanup failed: {cleanup_error}")
-                cleanup_success = False
 
         # Calculate final demonstration statistics
         total_time_seconds = total_demo_timer.get_duration_ms() / 1000.0

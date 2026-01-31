@@ -127,13 +127,16 @@ Computes rewards for state transitions.
 
 **Contract:** `contracts/reward_function_interface.md`
 
+`ActionType` matches the action processor interface (Discrete int or Box vector)
+and lives in `plume_nav_sim.interfaces.action`.
+
 **Required Methods:**
 
 ```python
 def compute_reward(
     self, 
     prev_state: AgentState,
-    action: int,
+    action: ActionType,
     next_state: AgentState,
     plume_field: ConcentrationField
 ) -> float: ...

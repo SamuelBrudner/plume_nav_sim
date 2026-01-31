@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${SCRIPT_DIR}/src/backend"
 
-ENV_NAME="plume-nav-sim"
+ENV_NAME="plume_nav_sim"
 PYTHON_VERSION="3.10"
 INCLUDE_DEV=0
 PERFORM_UPDATE=0

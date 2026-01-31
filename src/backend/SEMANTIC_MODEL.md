@@ -521,8 +521,8 @@ Used for debugging: "which component detected the error?"
 
 | Operation | Target | Measured By |
 |-----------|--------|-------------|
-| `env.step()` | < 1ms | `PerformanceMetrics` |
-| `env.reset()` | < 10ms | `PerformanceMetrics` |
+| `env.step()` | < 1ms | Internal timing summaries |
+| `env.reset()` | < 10ms | Internal timing summaries |
 | `env.render()` | < 16ms (60 FPS) | Frame timing |
 | Reward calculation | < 0.5ms | Internal timing |
 
@@ -688,7 +688,7 @@ env = plume_nav_sim.make_env()  # Uses sensible defaults
 
 ```python
 env = plume_nav_sim.make_env(
-    action_type='oriented',       # Choose from: 'discrete', 'oriented'
+    action_type='oriented',       # Choose from: 'discrete', 'oriented', 'run_tumble'
     observation_type='antennae',  # Choose from: 'concentration', 'antennae'
     reward_type='step_penalty'    # Choose from: 'sparse', 'step_penalty'
 )

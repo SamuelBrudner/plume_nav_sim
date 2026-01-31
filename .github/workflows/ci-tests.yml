@@ -16,6 +16,7 @@ jobs:
       MPLBACKEND: Agg
       PYTHONUNBUFFERED: "1"
       PLUME_CI_PERF_SCALE: "1.15"
+      QT_QPA_PLATFORM: "offscreen"
       PYTHONPATH: src
     steps:
       - name: Checkout
@@ -29,8 +30,11 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      - name: Install package with data + test + benchmark extras (and dev tools)
-        run: python -m pip install -e "src/backend[data,dev,test,benchmark]"
+      - name: Install package with gui/docs/media/notebooks + data/test/benchmark extras
+        run: python -m pip install -e "src/backend[gui,docs,media,notebooks,data,dev,test,benchmark]"
+
+      - name: Install additional optional deps for zero-skips run
+        run: python -m pip install "dask[array]" pyyaml
 
       - name: Run pytest and assert no tests are skipped
         run: |
@@ -38,17 +42,11 @@ jobs:
           pytest -q -ra -m "not performance" | tee pytest_output.txt
 
           if grep -q "SKIPPED" pytest_output.txt; then
-            echo "Found skipped tests in summary; checking for allowed skips..." >&2
-            disallowed_skips=$(grep "SKIPPED" pytest_output.txt | grep -Ev "zarr|xarray|imageio|PySide6|nbformat|movie_sidecar_integration" || true)
-            if [ -n "$disallowed_skips" ]; then
-              echo "Unexpected skipped tests detected:" >&2
-              echo "$disallowed_skips" >&2
-              exit 1
-            fi
-            echo "Only allowed skips (optional heavy dependencies) detected."
-          else
-            echo "No skipped tests detected."
+            echo "Unexpected skipped tests detected:" >&2
+            grep "SKIPPED" pytest_output.txt >&2
+            exit 1
           fi
+          echo "No skipped tests detected."
 
   data-capture-validation:
     runs-on: ubuntu-latest
@@ -260,6 +258,34 @@ jobs:
 
           print("Discovered debugger plugins:", sorted(names))
           PY
+
+  debugger-tests:
+    runs-on: ubuntu-latest
+    name: "Debugger tests (headless)"
+    env:
+      MPLBACKEND: Agg
+      PYTHONUNBUFFERED: "1"
+      QT_QPA_PLATFORM: "offscreen"
+      PYTHONPATH: src
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install backend + GUI deps
+        run: python -m pip install -e "src/backend[gui,test]"
+
+      - name: Run debugger pytest suite (headless)
+        run: |
+          set -euo pipefail
+          pytest -q tests/debugger -vv --tb=short
 
   gui-docs-media-tests:
     runs-on: ubuntu-latest

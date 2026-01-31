@@ -45,7 +45,7 @@ from plume_nav_sim.envs.factory import create_component_environment
 env = create_component_environment(
     grid_size=(128, 128),
     goal_location=(64, 64),
-    action_type='oriented',        # 'discrete' or 'oriented'
+    action_type='oriented',        # 'discrete', 'oriented', or 'run_tumble'
     observation_type='antennae',   # 'concentration' or 'antennae'
     reward_type='step_penalty',    # 'sparse' or 'step_penalty'
     goal_radius=2.0,
@@ -55,32 +55,6 @@ obs, info = env.reset(seed=42)
 
 - `action_space` is taken from the action processor
 - `observation_space` is taken from the observation model
-
----
-
-## Gymnasium Registration (Components)
-
-You can register a Gymnasium ID that uses the component-based environment:
-
-```python
-import gymnasium as gym
-from plume_nav_sim.registration import register_env, COMPONENT_ENV_ID
-
-# Register first-class DI env id (factory-backed)
-env_id = register_env(env_id=COMPONENT_ENV_ID, force_reregister=True)
-
-env = gym.make(env_id)
-obs, info = env.reset(seed=123)
-```
-
-Alternatively, to opt‑in globally without changing code, set an environment
-variable before calling `register_env()` with the default env id:
-
-```bash
-export PLUMENAV_DEFAULT=components
-```
-
-This preserves the same `ENV_ID` while swapping the implementation to components.
 
 ---
 
@@ -160,12 +134,16 @@ You can satisfy protocols by shape (duck typing) without subclassing.
 
 ### RewardFunction
 
+Use `ActionType` from `plume_nav_sim.interfaces` (discrete int or Box vector)
+to stay aligned with your action processor.
+
 ```python
 from typing import Any, Dict
 from plume_nav_sim.core.state import AgentState
+from plume_nav_sim.interfaces import ActionType
 
 class MyReward:
-    def compute_reward(self, prev_state: AgentState, action: int, next_state: AgentState, plume_field: Any) -> float:
+    def compute_reward(self, prev_state: AgentState, action: ActionType, next_state: AgentState, plume_field: Any) -> float:
         return 1.0 if next_state.position == prev_state.position else 0.0
 
     def get_metadata(self) -> Dict[str, Any]:
@@ -241,6 +219,5 @@ returning your implementation.
 
 ## Backward Compatibility
 
-The legacy `PlumeSearchEnv` remains supported. You can switch to components via
-factory/env injection, by registering `COMPONENT_ENV_ID`, or by setting the
-`PLUMENAV_DEFAULT=components` environment variable.
+The legacy `PlumeSearchEnv` remains supported, but new work should target `PlumeEnv`
+or manual component injection.

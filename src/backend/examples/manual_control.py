@@ -20,27 +20,11 @@ import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framewo
 import matplotlib.pyplot as plt  # >=3.9.0 - Interactive visualization framework for real-time manual control display with keyboard event handling
 import numpy as np  # >=2.1.0 - Array operations for manual control statistics, position tracking, and performance analysis
 
-from ..plume_nav_sim.core.constants import (
-    CONTROL_INSTRUCTIONS,
-    CONTROL_UPDATE_DELAY,
-    DEFAULT_GRID_SIZE,
-    DEFAULT_MANUAL_SEED,
-    DEFAULT_SOURCE_LOCATION,
-    KEYBOARD_MAPPING,
-    SESSION_TIMEOUT_MINUTES,
-    STATISTICS_DISPLAY_FREQUENCY,
-)
-from ..plume_nav_sim.core.types import (
-    Action,
-    AgentState,
-    Coordinates,
-    GridSize,
-    create_coordinates,
-    create_step_info,
-)
+from ..plume_nav_sim.core.constants import DEFAULT_SOURCE_LOCATION
+from ..plume_nav_sim.core.types import Action
 
 # Internal imports
-from ..plume_nav_sim.registration.register import COMPONENT_ENV_ID, ENV_ID, register_env
+from ..plume_nav_sim.registration.register import ENV_ID, register_env
 
 # Global constants for manual control configuration
 CONTROL_INSTRUCTIONS = (
@@ -105,9 +89,8 @@ def setup_manual_control(
     try:
         # Register environment using register_env() with validation and error handling
         logger.info("Registering plume navigation environment...")
-        # Prefer DI environment id for examples; legacy remains supported
-        register_env(env_id=COMPONENT_ENV_ID, force_reregister=True)
-        logger.info(f"Successfully registered environment: {COMPONENT_ENV_ID}")
+        register_env(env_id=ENV_ID, force_reregister=True)
+        logger.info(f"Successfully registered environment: {ENV_ID}")
 
         # Determine current matplotlib backend once so it is always defined
         current_backend = plt.get_backend()
@@ -135,8 +118,8 @@ def setup_manual_control(
                     )
 
         # Create environment instance using gym.make() with human render mode for real-time visualization
-        logger.info(f"Creating environment instance: {COMPONENT_ENV_ID}")
-        env = gym.make(COMPONENT_ENV_ID, render_mode="human")
+        logger.info(f"Creating environment instance: {ENV_ID}")
+        env = gym.make(ENV_ID, render_mode="human")
 
         # Initialize environment with provided seed or DEFAULT_MANUAL_SEED for reproducible sessions
         if seed is None:
@@ -446,7 +429,7 @@ def run_manual_control_session(
         last_statistics_display = 0
 
         while session_active:
-            loop_start_time = time.time()
+            _ = time.time()
 
             # Check for session timeout and goal achievement for session termination
             if _check_manual_session_timeout(
@@ -1152,7 +1135,7 @@ def _render_manual_control_session_summary(
     # Display plume navigation insights and educational takeaways
     educational_insights = session_results.get("educational_insights", [])
     if educational_insights:
-        print(f"\n🎓 EDUCATIONAL INSIGHTS:")
+        print("\n🎓 EDUCATIONAL INSIGHTS:")
         for insight in educational_insights:
             print(f"   • {insight}")
 
@@ -1179,19 +1162,19 @@ def _print_manual_control_session_overview_and_navigation(
     actions_per_second,
     current_distance,
 ) -> None:
-    print(f"\n📋 SESSION OVERVIEW:")
+    print("\n📋 SESSION OVERVIEW:")
     print(f"   Duration: {duration:.1f} seconds ({duration/60:.1f} minutes)")
     print(f"   Total Actions: {total_actions}")
     print(f"   Goal Achieved: {'✅ YES' if goal_reached else '❌ No'}")
     print(f"   Total Reward: {total_reward:.2f}")
 
-    print(f"\n🧭 NAVIGATION STATISTICS:")
+    print("\n🧭 NAVIGATION STATISTICS:")
     print(f"   Final Distance to Source: {current_distance}")
     print(f"   Movement Efficiency: {movement_efficiency:.2f}")
     print(f"   Average Actions per Second: {actions_per_second:.2f}")
 
     # Display reward accumulation and performance metrics
-    print(f"\n🏆 PERFORMANCE METRICS:")
+    print("\n🏆 PERFORMANCE METRICS:")
     if goal_reached:
         print("   🎯 Successfully reached the plume source!")
         time_to_goal = duration
@@ -1209,7 +1192,7 @@ def _print_manual_control_movement_analysis(action_distribution) -> None:
     if not action_distribution:
         return
 
-    print(f"\n🗺️  MOVEMENT PATTERN ANALYSIS:")
+    print("\n🗺️  MOVEMENT PATTERN ANALYSIS:")
     total_movements = sum(action_distribution.values())
     for direction, count in action_distribution.items():
         percentage = (count / total_movements) * 100 if total_movements > 0 else 0
@@ -1222,7 +1205,7 @@ def _print_manual_control_algorithmic_comparison(
     *, goal_reached: bool, duration: float, total_actions: int
 ) -> None:
     # Show comparison with theoretical optimal paths and algorithmic approaches
-    print(f"\n🤖 ALGORITHMIC COMPARISON:")
+    print("\n🤖 ALGORITHMIC COMPARISON:")
 
     if goal_reached and duration > 0:
         human_efficiency = total_actions / max(duration, 1)  # actions per second
@@ -1237,7 +1220,7 @@ def _print_manual_control_algorithmic_comparison(
 
 def _print_manual_control_next_steps() -> None:
     # Provide suggestions for future sessions and skill development opportunities
-    print(f"\n🚀 NEXT STEPS:")
+    print("\n🚀 NEXT STEPS:")
     next_steps = [
         "Try different starting strategies in a new session",
         "Experiment with systematic vs. intuitive exploration",
@@ -1257,7 +1240,7 @@ def _print_manual_control_next_steps() -> None:
 def _extracted_from_display_session_summary_100(
     goal_reached, movement_efficiency, total_actions, action_distribution
 ):
-    print(f"\n💡 LEARNING RECOMMENDATIONS:")
+    print("\n💡 LEARNING RECOMMENDATIONS:")
 
     recommendations = []
 
@@ -1304,7 +1287,7 @@ def _extracted_from_display_session_summary_100(
 
 # TODO Rename this here and in `display_session_summary`
 def _extracted_from_display_session_summary_80(session_results):
-    print(f"\n⚡ TECHNICAL PERFORMANCE:")
+    print("\n⚡ TECHNICAL PERFORMANCE:")
 
     avg_step_time = session_results.get("avg_step_time_ms", 0)
     avg_render_time = session_results.get("avg_render_time_ms", 0)

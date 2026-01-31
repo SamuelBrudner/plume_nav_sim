@@ -1,8 +1,9 @@
-"""Gym-facing wrapper that delegates to the DI-backed environment stack."""
+"""Deprecated Gym-facing wrapper that delegates to the DI-backed environment stack."""
 
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Any, Dict, Optional, Tuple
 
 import gymnasium as gym
@@ -10,11 +11,8 @@ import numpy as np
 from gymnasium.utils import seeding as gym_seeding
 from gymnasium.wrappers import TimeLimit
 
-from ..core.types import GridSize, RenderMode
-from ..render.matplotlib_viz import MatplotlibRenderer
-from ..render.numpy_rgb import NumpyRGBRenderer
-from ..utils.exceptions import ValidationError
-from ..utils.validation import validate_seed_value
+from .._compat import ValidationError, validate_seed_value
+from ..render.adapter import RendererAdapter
 from .component_env import ComponentBasedEnvironment
 from .factory import create_component_environment
 
@@ -28,11 +26,11 @@ __all__ = [
 
 def _normalize_grid_size(grid_size: Optional[Tuple[int, int]]) -> Tuple[int, int]:
     if grid_size is None:
-        from ..core.constants import DEFAULT_GRID_SIZE
+        from ..constants import DEFAULT_GRID_SIZE
 
         return DEFAULT_GRID_SIZE
 
-    from ..core.constants import MAX_GRID_SIZE
+    from ..constants import MAX_GRID_SIZE
 
     width, height = int(grid_size[0]), int(grid_size[1])
     if width <= 0 or height <= 0:
@@ -60,7 +58,7 @@ def _normalize_goal(
 
 def _normalize_goal_radius(goal_radius: Optional[float]) -> float:
     if goal_radius is None:
-        from ..core.constants import DEFAULT_GOAL_RADIUS
+        from ..constants import DEFAULT_GOAL_RADIUS
 
         goal_radius = float(DEFAULT_GOAL_RADIUS)
     value = float(goal_radius)
@@ -73,7 +71,7 @@ def _normalize_goal_radius(goal_radius: Optional[float]) -> float:
 
 def _normalize_max_steps(max_steps: Optional[int]) -> int:
     if max_steps is None:
-        from ..core.constants import DEFAULT_MAX_STEPS
+        from ..constants import DEFAULT_MAX_STEPS
 
         return DEFAULT_MAX_STEPS
     value = int(max_steps)
@@ -87,7 +85,7 @@ def _normalize_plume_sigma(plume_params: Optional[Dict[str, Any]]) -> float:
     if plume_params:
         sigma = plume_params.get("sigma")
     if sigma is None:
-        from ..core.constants import DEFAULT_PLUME_SIGMA
+        from ..constants import DEFAULT_PLUME_SIGMA
 
         return float(DEFAULT_PLUME_SIGMA)
     value = float(sigma)
@@ -119,18 +117,6 @@ class _AttributeForwardingTimeLimit(TimeLimit):
 
 
 class PlumeSearchEnv(gym.Env):
-    """Compatibility wrapper exposing the DI-backed component environment.
-
-    Delegation contract (stabilized by tests):
-    - Seeding: reset(seed=...) produces reproducible trajectories across
-      instances with identical configuration; wrapper forwards the seed to the
-      underlying environment and tracks the latest seed in info.
-    - Attributes: grid_size, source_location, max_steps, goal_radius reflect
-      the normalized constructor arguments for registration and docs stability.
-    - Rewards: step returns the immediate reward while maintaining an internal
-      cumulative reward that is exposed via info["total_reward"].
-    """
-
     metadata = ComponentBasedEnvironment.metadata
 
     def __init__(  # noqa: C901
@@ -143,6 +129,12 @@ class PlumeSearchEnv(gym.Env):
         plume_params: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
+        warnings.warn(
+            "PlumeSearchEnv is deprecated and will be removed in a future release. "
+            "Use PlumeEnv or create_plume_env instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         env_options = kwargs.get("env_options") or {}
 
         normalized_grid = _normalize_grid_size(grid_size)
@@ -179,19 +171,27 @@ class PlumeSearchEnv(gym.Env):
         for key in (
             "plume",
             "movie_path",
+            "movie_dataset_id",
+            "movie_auto_download",
+            "movie_cache_root",
             "movie_fps",
             "movie_pixel_to_grid",
             "movie_origin",
             "movie_extent",
             "movie_step_policy",
             "movie_h5_dataset",
+            "movie_normalize",
+            "movie_chunks",
+            "movie_data",
         ):
             if key in env_options:
                 factory_kwargs[key] = env_options[key]
             elif key in kwargs:
                 factory_kwargs[key] = kwargs[key]
 
-        self._core_env = create_component_environment(**factory_kwargs)
+        self._core_env = create_component_environment(
+            **factory_kwargs, warn_deprecated=False
+        )
 
         # Legacy attribute compatibility expected by registration tests
         # Ensure grid_size exposed here is always a plain (width, height) tuple
@@ -241,56 +241,8 @@ class PlumeSearchEnv(gym.Env):
         # Provide a renderer handle and default interactive configuration
         # for integration tests that expect env.renderer.* APIs to be present.
         # Adapter exposes a minimal unified surface across RGB and Matplotlib renderers.
-        class _RendererAdapter:
-            def __init__(self, width: int, height: int) -> None:
-                grid = GridSize(width=int(width), height=int(height))
-                # Initialize lightweight RGB renderer (for mode support checks)
-                try:
-                    self.rgb_renderer = NumpyRGBRenderer(grid)
-                except Exception:
-                    self.rgb_renderer = None
-                # Initialize Matplotlib renderer for interactive configuration APIs
-                try:
-                    self.matplotlib_renderer = MatplotlibRenderer(grid)
-                except Exception:
-                    self.matplotlib_renderer = None
-
-            # Mode support check used by test helper
-            def supports_render_mode(self, mode: RenderMode) -> bool:
-                if mode == RenderMode.RGB_ARRAY:
-                    return self.rgb_renderer is not None
-                if mode == RenderMode.HUMAN:
-                    if self.matplotlib_renderer is None:
-                        return False
-                    try:
-                        return self.matplotlib_renderer.supports_render_mode(mode)
-                    except Exception:
-                        return False
-                return False
-
-            # Interactive configuration helpers forwarded to matplotlib renderer if available
-            def configure_interactive_mode(self, cfg) -> bool:
-                if self.matplotlib_renderer is None:
-                    return False
-                return bool(self.matplotlib_renderer.configure_interactive_mode(cfg))
-
-            def enable_interactive_mode(self) -> None:
-                if self.matplotlib_renderer is not None:
-                    self.matplotlib_renderer.enable_interactive_mode()
-
-            def disable_interactive_mode(self) -> None:
-                if self.matplotlib_renderer is not None:
-                    self.matplotlib_renderer.disable_interactive_mode()
-
-            def set_interactive_mode(self, enable: bool = True, **kwargs) -> bool:
-                if self.matplotlib_renderer is None:
-                    return False
-                return bool(
-                    self.matplotlib_renderer.set_interactive_mode(enable, **kwargs)
-                )
-
         w, h = normalized_grid
-        self.renderer = _RendererAdapter(width=w, height=h)
+        self.renderer = RendererAdapter(width=w, height=h)
 
         # Default interactive configuration consumed by rendering tests
         self.interactive_config = {
@@ -363,12 +315,6 @@ class PlumeSearchEnv(gym.Env):
         )
 
     def render(self, mode: Optional[str] = None) -> Any:
-        """Render with Gymnasium-compatible semantics.
-
-        - If no mode is provided, respect the wrapped env's configured render_mode.
-        - For 'rgb_array', return an ndarray frame; fall back to core env or zeros.
-        - For 'human', return None (side-effects may occur in wrapped envs).
-        """
         effective_mode = (
             mode if mode is not None else getattr(self._env, "render_mode", None)
         )
@@ -501,26 +447,10 @@ def unwrap_to_plume_env(env: gym.Env) -> PlumeSearchEnv:
 
 
 def create_plume_search_env(**kwargs: Any) -> PlumeSearchEnv:
-    """Factory function to create a PlumeSearchEnv instance.
-
-    Args:
-        **kwargs: Configuration parameters passed to PlumeSearchEnv constructor.
-
-    Returns:
-        PlumeSearchEnv: Configured environment instance.
-    """
     return PlumeSearchEnv(**kwargs)
 
 
 def validate_plume_search_config(**kwargs: Any) -> Dict[str, Any]:
-    """Validate and normalize PlumeSearchEnv configuration parameters.
-
-    Args:
-        **kwargs: Raw configuration parameters to validate.
-
-    Returns:
-        Dict[str, Any]: Validated and normalized configuration.
-    """
     grid = _normalize_grid_size(kwargs.get("grid_size"))
     source = _normalize_goal(kwargs.get("source_location"), grid)
     max_steps = _normalize_max_steps(kwargs.get("max_steps"))

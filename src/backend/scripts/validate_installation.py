@@ -85,15 +85,12 @@ try:
     # Main package interface imports for version checking, package information, and initialization validation
     from plume_nav_sim import (
         ENV_ID,
-        PlumeSearchEnv,
         create_plume_search_env,
         get_package_info,
         get_version,
-        initialize_package,
         is_registered,
         register_env,
         unregister_env,
-        validate_plume_search_config,
     )
 
     PLUME_NAV_SIM_AVAILABLE = True
@@ -107,24 +104,13 @@ try:
         DEFAULT_GRID_SIZE,
         MEMORY_LIMIT_TOTAL_MB,
         PACKAGE_VERSION,
+        PERFORMANCE_TARGET_RGB_RENDER_MS,
         PERFORMANCE_TARGET_STEP_LATENCY_MS,
     )
 
     CONSTANTS_AVAILABLE = True
 except ImportError:
     CONSTANTS_AVAILABLE = False
-
-try:
-    # Validation utilities for configuration and parameter checking
-    from plume_nav_sim.utils.validation import (
-        ValidationResult,
-        create_validation_context,
-        validate_environment_config,
-    )
-
-    VALIDATION_UTILS_AVAILABLE = True
-except ImportError:
-    VALIDATION_UTILS_AVAILABLE = False
 
 # Global validation configuration constants
 VALIDATION_SUCCESS_EXIT_CODE = 0
@@ -683,7 +669,7 @@ def check_system_resources(
             try:
                 # Simple CPU benchmark
                 start_time = time.perf_counter()
-                result = sum(i * i for i in range(10000))
+                sum(i * i for i in range(10000))
                 cpu_time = (time.perf_counter() - start_time) * 1000
 
                 resource_info["cpu_benchmark_ms"] = cpu_time
@@ -819,8 +805,8 @@ def check_package_installation(
                 "plume_nav_sim.core",
                 "plume_nav_sim.core.constants",
                 "plume_nav_sim.core.types",
-                "plume_nav_sim.utils",
-                "plume_nav_sim.utils.validation",
+                "plume_nav_sim._compat",
+                "plume_nav_sim.logging",
             ]
 
             missing_modules = []
@@ -967,8 +953,8 @@ def check_dependencies(
                 from gymnasium.spaces import Box, Discrete
 
                 # Test space creation that the package uses
-                action_space = Discrete(4)
-                observation_space = Box(
+                Discrete(4)
+                Box(
                     low=0.0,
                     high=1.0,
                     shape=(1,),
@@ -1488,7 +1474,7 @@ def validate_registration_system(
         try:
             # First, clean up any existing registration
             if is_registered(ENV_ID):
-                unregister_env(ENV_ID, suppress_warnings=True)
+                unregister_env(ENV_ID)
 
             # Register the environment
             registered_id = register_env()
@@ -1564,7 +1550,7 @@ def validate_registration_system(
 
                 # Clean up any existing custom registration
                 if is_registered(custom_env_id):
-                    unregister_env(custom_env_id, suppress_warnings=True)
+                    unregister_env(custom_env_id)
 
                 # Test registration with custom grid size
                 if CONSTANTS_AVAILABLE:
@@ -1597,7 +1583,7 @@ def validate_registration_system(
 
                 # Clean up custom registration
                 if cleanup_registration:
-                    unregister_env(custom_env_id, suppress_warnings=True)
+                    unregister_env(custom_env_id)
 
             except Exception as e:
                 if not QUIET_MODE:
@@ -1642,7 +1628,7 @@ def validate_registration_system(
         # Test environment unregistration and cleanup if cleanup_registration enabled
         if cleanup_registration:
             try:
-                success = unregister_env(ENV_ID, suppress_warnings=True)
+                success = unregister_env(ENV_ID)
 
                 if not success:
                     if VERBOSE_OUTPUT:
@@ -1806,7 +1792,7 @@ def run_basic_performance_validation(
 
                 for frame in range(render_frames):
                     render_start = time.perf_counter()
-                    rgb_array = env.render(mode="rgb_array")
+                    env.render(mode="rgb_array")
                     render_end = time.perf_counter()
 
                     render_time_ms = (render_end - render_start) * 1000
@@ -1823,17 +1809,9 @@ def run_basic_performance_validation(
                         )
 
                     # Check against rendering performance target
-                    if CONSTANTS_AVAILABLE and hasattr(
-                        "PERFORMANCE_TARGET_RGB_RENDER_MS", "replace"
-                    ):
-                        # Fallback target if constant not available
-                        render_target = 5.0  # 5ms target
-                    else:
-                        render_target = (
-                            getattr(constants, "PERFORMANCE_TARGET_RGB_RENDER_MS", 5.0)
-                            if CONSTANTS_AVAILABLE
-                            else 5.0
-                        )
+                    render_target = (
+                        PERFORMANCE_TARGET_RGB_RENDER_MS if CONSTANTS_AVAILABLE else 5.0
+                    )
 
                     if avg_render_time > render_target * 2:
                         performance_metrics["performance_warnings"].append(

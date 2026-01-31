@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from plume_nav_sim.utils.time_mapping import (
+from plume_nav_sim.media.time_mapping import (
     DEFAULT_FRAME_MAPPING_POLICY,
     FrameMappingPolicy,
     map_step_to_frame,
@@ -67,7 +67,7 @@ def test_offset_frames_applied_before_rounding():
 
 def test_rounding_policies_on_half_values():
     # step=3, fps=30, steps_per_second=60 -> f_float = 1.5
-    base_kwargs = dict(step=3, fps=30.0, steps_per_second=60.0)
+    base_kwargs = {"step": 3, "fps": 30.0, "steps_per_second": 60.0}
 
     assert map_step_to_frame(**base_kwargs, rounding="floor") == 1
     assert map_step_to_frame(**base_kwargs, rounding="nearest") == 2

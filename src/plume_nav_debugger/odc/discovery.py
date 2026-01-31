@@ -21,9 +21,9 @@ def _load_entry_point_provider() -> Optional[DebuggerProvider]:
         if hasattr(eps, "select"):
             group = list(eps.select(group="plume_nav_sim.debugger_plugins"))
         else:  # pragma: no cover - legacy API
-            group = [
-                ep for ep in eps.get("plume_nav_sim.debugger_plugins", [])  # type: ignore[attr-defined]
-            ]
+            group = list(  # type: ignore[attr-defined]
+                eps.get("plume_nav_sim.debugger_plugins", [])
+            )
         for ep in group or []:
             try:
                 obj = ep.load()
@@ -90,4 +90,19 @@ def find_provider(env: Any, policy: Any) -> Optional[DebuggerProvider]:
                 return prov
         except Exception:
             pass
+    # Built-in policy support (fallback)
+    try:
+        from plume_nav_sim.policies.temporal_derivative import TemporalDerivativePolicy
+        from plume_nav_sim.policies.temporal_derivative_deterministic import (
+            TemporalDerivativeDeterministicPolicy,
+        )
+
+        from .td_provider import TemporalDerivativeProvider
+
+        if isinstance(policy, TemporalDerivativePolicy):
+            return TemporalDerivativeProvider(mode="stochastic")
+        if isinstance(policy, TemporalDerivativeDeterministicPolicy):
+            return TemporalDerivativeProvider(mode="deterministic")
+    except Exception:
+        pass
     return None

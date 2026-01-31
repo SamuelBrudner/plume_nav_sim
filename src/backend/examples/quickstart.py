@@ -31,7 +31,7 @@ def main() -> None:
 
         # Attempt GIF first (requires imageio via optional [media] extras)
         try:
-            from plume_nav_sim.utils.video import save_video_events
+            from plume_nav_sim.plume.video import save_video_events
 
             out_gif = Path("quickstart.gif")
             save_video_events(events, out_gif, fps=12)

@@ -1,25 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import gymnasium as gym
 import numpy as np
 
 from ..actions.oriented_grid import OrientedGridActions
 from ..interfaces import Policy
+from ._concentration_extractor import extract_concentration
 
 
 @dataclass
 class TemporalDerivativePolicy(Policy):
-    """Stochastic temporal-gradient policy for oriented control.
-
-    - Maintains 1-back concentration measured only after FORWARD steps
-    - Surges FORWARD on non-decreasing concentration (dC >= eps)
-    - Otherwise casts by turning; enforces a FORWARD probe right after any TURN
-    - Adds epsilon-greedy exploration for RL preparation
-    """
-
     eps: float = 0.05  # exploration rate
     eps_after_turn: float = (
         0.0  # exploration right after turn (default off to avoid spin)
@@ -33,12 +26,18 @@ class TemporalDerivativePolicy(Policy):
     # rather than only turning. This models bacterial-like random tumbles that
     # can include a forward step even without improvement.
     uniform_random_on_non_increase: bool = False
+    # Optional adapters for multi-modal observations
+    concentration_key: Optional[str] = None  # key to pull concentration from dict obs
+    modality_index: int = 0  # index when observation is a tuple/list of modalities
+    sensor_index: Optional[int] = None  # index when observation is a 1D vector >1
 
     def __post_init__(self) -> None:
         self._rng = np.random.default_rng(self.eps_seed)
         self._actions = OrientedGridActions()
         self._last_c: Optional[float] = None
         self._last_action: Optional[int] = None
+        self._prev_c: Optional[float] = None
+        self._prev_action: Optional[int] = None
 
     # Policy protocol -----------------------------------------------------
     @property
@@ -50,15 +49,28 @@ class TemporalDerivativePolicy(Policy):
             self._rng = np.random.default_rng(seed)
         self._last_c = None
         self._last_action = None
+        self._prev_c = None
+        self._prev_action = None
 
-    def select_action(self, observation: np.ndarray, *, explore: bool = True) -> int:
-        c = float(observation[0])
+    def select_action(self, observation: Any, *, explore: bool = True) -> int:
+        c = extract_concentration(
+            observation,
+            policy_name=self.__class__.__name__,
+            concentration_key=self.concentration_key,
+            modality_index=self.modality_index,
+            sensor_index=self.sensor_index,
+        )
 
         # Initialize reference on first call
         if self._last_c is None:
+            self._prev_c = None
+            self._prev_action = None
             self._last_c = c
             self._last_action = 0
             return 0
+
+        self._prev_c = self._last_c
+        self._prev_action = self._last_action
 
         # Compute dc identically every step
         dc = c - self._last_c
@@ -87,10 +99,6 @@ class TemporalDerivativePolicy(Policy):
 
     # --------------------------------------------------------------------
     def _sample_explore(self, *, after_turn: bool = False) -> int:
-        """Sample an exploratory action.
-
-        If after_turn is True, prefer FORWARD to quickly probe the new heading.
-        """
         if after_turn:
             # Mostly prefer forward; allow a tiny chance to turn to keep stochasticity
             if self._rng.random() < max(0.8, 1.0 - self.eps):

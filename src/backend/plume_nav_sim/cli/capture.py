@@ -6,18 +6,14 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 import plume_nav_sim as pns
-from plume_nav_sim.core.types import EnvironmentConfig
 from plume_nav_sim.data_capture import RunRecorder
 from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper
+from plume_nav_sim.envs.config_types import EnvironmentConfig
 
 
 def _parse_args_and_overrides(
     argv: Optional[list[str]] = None,
 ) -> Tuple[argparse.Namespace, List[str]]:
-    """Parse CLI args, returning known args and passthrough overrides.
-
-    Overrides are intended for Hydra, e.g. ["episodes=5", "env.max_steps=100"].
-    """
     p = argparse.ArgumentParser(
         description="Run plume-nav-sim episodes and capture analysis-ready data",
         add_help=True,
@@ -31,6 +27,13 @@ def _parse_args_and_overrides(
     p.add_argument("--seed", type=int, default=123, help="Base seed for first episode")
     p.add_argument(
         "--grid", type=str, default="64x64", help="Grid size WxH, e.g., 64x64"
+    )
+    p.add_argument(
+        "--action-type",
+        type=str,
+        choices=["discrete", "oriented", "run_tumble"],
+        default=None,
+        help="Action processor ('discrete', 'oriented', 'run_tumble'). Defaults to config or 'oriented'.",
     )
     p.add_argument(
         "--max-steps", type=int, default=None, help="Max steps per episode (override)"
@@ -65,12 +68,6 @@ def _parse_args_and_overrides(
 
 
 def _resolve_config_dir(config_path: Optional[str]) -> str:
-    """Resolve the Hydra config directory, defaulting to the repo conf/ tree.
-
-    Uses plume_nav_sim.get_conf_dir() when available, falling back to
-    conf/ relative to this file. This mirrors the previous inline logic
-    in _load_hydra_config.
-    """
     if config_path:
         return config_path
 
@@ -85,12 +82,6 @@ def _manual_compose_for_data_capture(
     conf_root: Path,
     overrides: List[str],
 ) -> dict:
-    """Manual composition for data_capture/config to support mixed group locations.
-
-    This handles the case where data_capture/config.yaml references groups
-    that live at the repository conf/ root (e.g., movie/, env/plume/), while
-    the experiment/ group lives under conf/data_capture/.
-    """
     from omegaconf import OmegaConf
 
     yaml_path = _get_data_capture_yaml_path(config_name, conf_root)
@@ -104,11 +95,6 @@ def _manual_compose_for_data_capture(
 
 
 def _get_data_capture_yaml_path(config_name: str, conf_root: Path) -> Path:
-    """Locate the YAML file for a given data_capture config.
-
-    This preserves the original MissingConfigException semantics used by
-    _manual_compose_for_data_capture.
-    """
     from hydra.errors import MissingConfigException
 
     yaml_path = conf_root.joinpath(*config_name.split("/"))
@@ -269,11 +255,13 @@ def _parse_grid_arg(grid: str) -> Tuple[int, int]:
         raise SystemExit("--grid must be formatted as WxH, e.g., 64x64") from e
 
 
-def _env_from_cfg(cfg: dict) -> Tuple[object, int, int]:
+def _env_from_cfg(
+    cfg: dict, action_type_override: Optional[str] = None
+) -> Tuple[object, int, int]:
     env_cfg = cfg.get("env", {})
     plume_mode = env_cfg.get("plume", "static")
     make_kwargs = {
-        "action_type": env_cfg.get("action_type", "oriented"),
+        "action_type": action_type_override or env_cfg.get("action_type", "oriented"),
         "observation_type": env_cfg.get("observation_type", "concentration"),
         "reward_type": env_cfg.get("reward_type", "step_penalty"),
         "max_steps": env_cfg.get("max_steps", None) or None,
@@ -293,10 +281,14 @@ def _env_from_cfg(cfg: dict) -> Tuple[object, int, int]:
 # TODO Rename this here and in `_env_from_cfg`
 def _extracted_from__env_from_cfg_11(cfg, make_kwargs):
     movie_cfg = cfg.get("movie", {})
+    movie_dataset_id = movie_cfg.get("dataset_id")
     make_kwargs.update(
         {
             "plume": "movie",
             "movie_path": movie_cfg.get("path"),
+            "movie_dataset_id": movie_dataset_id,
+            "movie_auto_download": bool(movie_cfg.get("auto_download", False)),
+            "movie_cache_root": movie_cfg.get("cache_root"),
             "movie_fps": movie_cfg.get("fps"),
             "movie_pixel_to_grid": (
                 tuple(movie_cfg.get("pixel_to_grid"))
@@ -311,6 +303,8 @@ def _extracted_from__env_from_cfg_11(cfg, make_kwargs):
             ),
             "movie_step_policy": movie_cfg.get("step_policy", "wrap"),
             "movie_h5_dataset": movie_cfg.get("h5_dataset"),
+            "movie_normalize": movie_cfg.get("normalize"),
+            "movie_chunks": movie_cfg.get("chunks"),
         }
     )
     env = pns.make_env(**make_kwargs)
@@ -338,6 +332,12 @@ def _merge_args_from_cfg(
         args.episodes if provided("--episodes") else int(cfg.get("episodes", 1))
     )
     args.seed = args.seed if provided("--seed") else int(cfg.get("seed", 123))
+    env_cfg = cfg.get("env", {})
+    args.action_type = (
+        args.action_type
+        if provided("--action-type")
+        else env_cfg.get("action_type", "oriented")
+    )
     args.rotate_size = (
         args.rotate_size if provided("--rotate-size") else cfg.get("rotate_size")
     )
@@ -346,13 +346,85 @@ def _merge_args_from_cfg(
     )
 
 
+def _coerce_pair(value: object) -> tuple[int, int] | None:
+    try:
+        first = getattr(value, "x", None)
+        second = getattr(value, "y", None)
+        if first is not None and second is not None:
+            return int(first), int(second)
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            return int(value[0]), int(value[1])
+    except Exception:
+        return None
+    return None
+
+
+def _maybe_add_int(cfg_kwargs: dict[str, object], env: object, name: str) -> None:
+    raw = getattr(env, name, None)
+    if raw is None:
+        return
+    try:
+        cfg_kwargs[name] = int(raw)
+    except Exception:
+        pass
+
+
+def _maybe_add_float(cfg_kwargs: dict[str, object], env: object, name: str) -> None:
+    raw = getattr(env, name, None)
+    if raw is None:
+        return
+    try:
+        cfg_kwargs[name] = float(raw)
+    except Exception:
+        pass
+
+
+def _infer_enable_rendering(env: object) -> bool | None:
+    enable_rendering = getattr(env, "enable_rendering", None)
+    if enable_rendering is not None:
+        return bool(enable_rendering)
+    render_mode = getattr(env, "render_mode", None)
+    if render_mode is not None:
+        return True
+    return None
+
+
+def _capture_env_config(
+    env: object, default_grid: tuple[int, int]
+) -> EnvironmentConfig:
+    """Extract the effective environment configuration for run metadata."""
+
+    grid = _coerce_pair(getattr(env, "grid_size", None)) or default_grid
+    src = _coerce_pair(getattr(env, "source_location", None))
+    if src is None:
+        src = (grid[0] // 2, grid[1] // 2)
+
+    cfg_kwargs: dict[str, object] = {
+        "grid_size": grid,
+        "source_location": src,
+    }
+
+    _maybe_add_int(cfg_kwargs, env, "max_steps")
+    _maybe_add_float(cfg_kwargs, env, "goal_radius")
+
+    plume_params = getattr(env, "plume_params", None)
+    if plume_params is not None:
+        cfg_kwargs["plume_params"] = plume_params
+
+    enable_rendering = _infer_enable_rendering(env)
+    if enable_rendering is not None:
+        cfg_kwargs["enable_rendering"] = enable_rendering
+
+    return EnvironmentConfig(**cfg_kwargs)
+
+
 def _run_capture(
     env: object, w: int, h: int, *, args: argparse.Namespace, cfg_hash: Optional[str]
 ) -> None:
     rec = RunRecorder(
         args.output, experiment=args.experiment, rotate_size_bytes=args.rotate_size
     )
-    cfg = EnvironmentConfig(grid_size=(w, h), source_location=(w // 2, h // 2))
+    cfg = _capture_env_config(env, default_grid=(w, h))
     wrapped = DataCaptureWrapper(
         env, rec, cfg, meta_overrides={"config_hash": cfg_hash} if cfg_hash else None
     )
@@ -385,7 +457,10 @@ def main(argv: Optional[list[str]] = None) -> int:
             config_path=args.config_path,
             overrides=overrides,
         )
-        env, w, h = _env_from_cfg(cfg)
+        try:
+            env, w, h = _env_from_cfg(cfg, action_type_override=args.action_type)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
         # Ensure flag detection works when invoked via `python -m` (argv is None)
         from sys import argv as sys_argv
 
@@ -397,7 +472,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         w, h = _parse_grid_arg(args.grid)
         env = pns.make_env(
             grid_size=(w, h),
-            action_type="oriented",
+            action_type=args.action_type or "oriented",
             observation_type="concentration",
             reward_type="step_penalty",
             max_steps=args.max_steps,
