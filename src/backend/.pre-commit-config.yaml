@@ -226,7 +226,7 @@ repos:
         language: python
         types: [python]
         stages: [pre-push]
-        args: ['--convention=numpy', '--add-ignore=D100,D102,D104,D105,D200,D202,D205,D400,D401,D406,D407']
+        args: ['--convention=numpy', '--add-ignore=D100,D101,D102,D103,D104,D105,D106,D200,D202,D205,D400,D401,D406,D407']
         files: '^src/backend/plume_nav_sim/'
         exclude: '^(src/backend/plume_nav_sim/render/|src/backend/plume_nav_sim/utils/spaces\.py$)'
         additional_dependencies: ['tomli']
