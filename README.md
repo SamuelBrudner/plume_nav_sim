@@ -2,6 +2,7 @@
 
 Gymnasium-compatible plume navigation environments engineered for reproducible simulations. Begin with a single `make_env()` call, customize through typed options, and inject bespoke components when experiments demand it.
 
+
 [![PyPI](https://img.shields.io/pypi/v/plume-nav-sim.svg)](https://pypi.org/project/plume-nav-sim/)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
