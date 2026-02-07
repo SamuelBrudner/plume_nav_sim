@@ -14,9 +14,9 @@ def _try_import_h5py():
         import h5py
 
         return h5py
-    except Exception as e:  # pragma: no cover - exercised when media extras missing
+    except ImportError as e:  # pragma: no cover - exercised when video extras missing
         raise ImportError(
-            "h5py is required for HDF5 movie ingest. Install with 'pip install h5py'."
+            "h5py is required for HDF5 movie ingest. Install with 'pip install plume-nav-sim[video]'."
         ) from e
 
 
