@@ -9,9 +9,6 @@ from .clean_cache import main as clean_cache_main
 from .run_tests import TestExecutionConfig, TestResult, TestRunner
 from .run_tests import main as run_tests_main
 from .run_tests import run_test_suite
-from .validate_installation import check_python_version
-from .validate_installation import main as validate_installation_main
-from .validate_installation import validate_environment_functionality
 
 logger = logging.getLogger("plume_nav_sim.scripts")
 
@@ -35,12 +32,25 @@ def validate_installation(
     verbose: bool = False,
     performance_tests: bool = False,
 ) -> int:
-    args = list(args or [])
-    if verbose and "--verbose" not in args:
-        args.append("--verbose")
-    if performance_tests and "--performance-tests" not in args:
-        args.append("--performance-tests")
-    return validate_installation_main(args)
+    del args, verbose, performance_tests
+    raise RuntimeError(
+        "validate_installation.py has been archived. "
+        "Use `pytest`, `python -m plume_nav_sim.scripts.run_tests`, and "
+        "`python scripts/validate_constants_drift.py` for checks."
+    )
+
+
+def check_python_version(*_args, **_kwargs) -> bool:
+    raise RuntimeError(
+        "check_python_version helper was archived with validate_installation.py"
+    )
+
+
+def validate_environment_functionality(*_args, **_kwargs) -> bool:
+    raise RuntimeError(
+        "validate_environment_functionality helper was archived "
+        "with validate_installation.py"
+    )
 
 
 def run_tests(args: Optional[List[str]] = None) -> int:
