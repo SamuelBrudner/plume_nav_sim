@@ -10,6 +10,35 @@ from plume_nav_sim.data_capture import RunRecorder
 from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper
 from plume_nav_sim.envs.config_types import EnvironmentConfig
 
+HYDRA_OPTIONAL_DEPENDENCY_MSG = (
+    "Hydra/OmegaConf support is optional. Install it with: "
+    "pip install plume-nav-sim[hydra]"
+)
+
+
+def _require_omegaconf() -> Any:
+    try:
+        from omegaconf import OmegaConf
+    except ImportError as exc:
+        raise ImportError(HYDRA_OPTIONAL_DEPENDENCY_MSG) from exc
+    return OmegaConf
+
+
+def _require_hydra_missing_config_exception() -> Any:
+    try:
+        from hydra.errors import MissingConfigException
+    except ImportError as exc:
+        raise ImportError(HYDRA_OPTIONAL_DEPENDENCY_MSG) from exc
+    return MissingConfigException
+
+
+def _require_hydra_runtime() -> tuple[Any, Any]:
+    try:
+        from hydra import compose, initialize_config_dir
+    except ImportError as exc:
+        raise ImportError(HYDRA_OPTIONAL_DEPENDENCY_MSG) from exc
+    return compose, initialize_config_dir
+
 
 def _parse_args_and_overrides(
     argv: Optional[list[str]] = None,
@@ -82,7 +111,7 @@ def _manual_compose_for_data_capture(
     conf_root: Path,
     overrides: List[str],
 ) -> dict:
-    from omegaconf import OmegaConf
+    OmegaConf = _require_omegaconf()
 
     yaml_path = _get_data_capture_yaml_path(config_name, conf_root)
     base_cfg = OmegaConf.load(yaml_path)
@@ -95,7 +124,7 @@ def _manual_compose_for_data_capture(
 
 
 def _get_data_capture_yaml_path(config_name: str, conf_root: Path) -> Path:
-    from hydra.errors import MissingConfigException
+    MissingConfigException = _require_hydra_missing_config_exception()
 
     yaml_path = conf_root.joinpath(*config_name.split("/"))
     if not yaml_path.suffix:
@@ -117,7 +146,7 @@ def _compose_data_capture_defaults(
     conf_root: Path,
 ) -> Any:
     """Compose a base data_capture config using its defaults list."""
-    from omegaconf import OmegaConf
+    OmegaConf = _require_omegaconf()
 
     composed = OmegaConf.create()
     # Start from the base config, then overlay defaults entries in order.
@@ -137,7 +166,7 @@ def _compose_data_capture_defaults(
 
 def _apply_overrides_for_data_capture(composed: Any, overrides: List[str]) -> Any:
     """Apply CLI overrides to a composed config using OmegaConf dotlist parsing."""
-    from omegaconf import OmegaConf
+    OmegaConf = _require_omegaconf()
 
     if not overrides:
         return composed
@@ -153,8 +182,8 @@ def _apply_overrides_for_data_capture(composed: Any, overrides: List[str]) -> An
 
 def _process_default_item(item: dict, conf_root: Path) -> Any:
     """Helper to process a single default item for manual composition."""
-    from hydra.errors import MissingConfigException
-    from omegaconf import OmegaConf
+    MissingConfigException = _require_hydra_missing_config_exception()
+    OmegaConf = _require_omegaconf()
 
     # Only single-key mappings are expected in defaults
     [(group_key, option)] = list(item.items())
@@ -220,9 +249,9 @@ def _load_hydra_config(
             overrides=overrides or [],
         )
     else:
-        from hydra import compose, initialize_config_dir
-        from hydra.errors import MissingConfigException
-        from omegaconf import OmegaConf
+        compose, initialize_config_dir = _require_hydra_runtime()
+        MissingConfigException = _require_hydra_missing_config_exception()
+        OmegaConf = _require_omegaconf()
 
         with initialize_config_dir(version_base=None, config_dir=config_dir):
             try:
