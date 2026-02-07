@@ -45,20 +45,28 @@ _ENV_IMPORT_ERROR: Optional[Exception] = None
 
 try:
     from .envs import PlumeEnv as _PlumeEnv
-    from .envs import PlumeSearchEnv as _PlumeSearchEnv
     from .envs import create_plume_env as _create_plume_env
-    from .envs import create_plume_search_env as _create_plume_search_env
 
     PlumeEnv = _PlumeEnv
     create_plume_env = _create_plume_env
-    PlumeSearchEnv = _PlumeSearchEnv
-    create_plume_search_env = _create_plume_search_env
 except Exception as env_import_error:  # pragma: no cover - optional dependency guard
     PlumeEnv = None
     create_plume_env = None
+    _ENV_IMPORT_ERROR = env_import_error
+
+try:
+    from .envs.plume_search_env import PlumeSearchEnv as _PlumeSearchEnv
+    from .envs.plume_search_env import (
+        create_plume_search_env as _create_plume_search_env,
+    )
+
+    PlumeSearchEnv = _PlumeSearchEnv
+    create_plume_search_env = _create_plume_search_env
+except Exception as env_import_error:  # pragma: no cover - optional dependency guard
     PlumeSearchEnv = None
     create_plume_search_env = None
-    _ENV_IMPORT_ERROR = env_import_error
+    if _ENV_IMPORT_ERROR is None:
+        _ENV_IMPORT_ERROR = env_import_error
 
 
 def initialize_package(  # noqa: C901

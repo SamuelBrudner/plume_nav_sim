@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 from plume_nav_sim._compat import StateError, ValidationError
-from plume_nav_sim.envs import PlumeSearchEnv
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
 
 
 class TestEnvironmentStateTransitions:

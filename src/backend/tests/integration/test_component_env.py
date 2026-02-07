@@ -13,7 +13,8 @@ import pytest
 
 from plume_nav_sim.actions import DiscreteGridActions
 from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.envs import ComponentBasedEnvironment, EnvironmentState
+from plume_nav_sim.envs import ComponentBasedEnvironment
+from plume_nav_sim.envs.state import EnvironmentState
 from plume_nav_sim.interfaces.action import ActionType
 from plume_nav_sim.observations import ConcentrationSensor
 from plume_nav_sim.plume.gaussian import GaussianPlume

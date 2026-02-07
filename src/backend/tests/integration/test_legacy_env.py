@@ -8,7 +8,7 @@ behaviours without depending on Gymnasium's registry.
 
 import numpy as np
 
-from plume_nav_sim.envs import create_plume_search_env
+from plume_nav_sim.envs.plume_search_env import create_plume_search_env
 
 
 def test_legacy_env_reset_and_step_basic():

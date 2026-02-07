@@ -3,7 +3,7 @@ Smoke tests for the unified create_environment() helper to ensure it can
 instantiate both the legacy and component-based environments.
 """
 
-from plume_nav_sim.envs import create_environment
+from plume_nav_sim.envs.compat import create_environment
 
 
 def test_create_legacy_via_unified_factory():
