@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Protocol, Sequence, TypedDict
 
 import numpy as np
 
@@ -13,6 +13,9 @@ try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray
 except ImportError:  # pragma: no cover
     NDArray = np.ndarray  # type: ignore[assignment]
+
+if TYPE_CHECKING:
+    from ..interfaces.fields import VectorField
 
 DEFAULT_GRID_SIZE = (128, 128)
 DEFAULT_SOURCE_LOCATION = (64, 64)
@@ -143,6 +146,26 @@ class AgentState:
         self.goal_reached = True
 
 
+class SupportsFieldArray(Protocol):
+    """Protocol for plume field objects exposing an array."""
+
+    field_array: NDArray[np.floating[Any]]
+
+
+class EnvState(TypedDict):
+    """Typed environment state passed to observation models."""
+
+    agent_state: AgentState | None
+    plume_field: NDArray[np.floating[Any]]
+    concentration_field: SupportsFieldArray
+    wind_field: "VectorField | None"
+    goal_location: Coordinates
+    grid_size: GridSize
+    step_count: int
+    max_steps: int
+    rng: np.random.Generator | None
+
+
 CoordinateType = Coordinates | tuple[int, int] | Sequence[int]
 GridDimensions = GridSize | tuple[int, int] | Sequence[int]
 MovementVector = tuple[int, int]
@@ -205,6 +228,7 @@ __all__ = [
     "AgentState",
     "CoordinateType",
     "Coordinates",
+    "EnvState",
     "GridDimensions",
     "GridSize",
     "Info",

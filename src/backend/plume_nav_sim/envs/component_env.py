@@ -16,7 +16,7 @@ from ..constants import (
     SOURCE_MARKER_COLOR,
     SOURCE_MARKER_SIZE,
 )
-from ..core.types import AgentState, Coordinates, GridSize
+from ..core.types import AgentState, Coordinates, EnvState, GridSize
 from .state import EnvironmentState
 
 if TYPE_CHECKING:
@@ -496,7 +496,7 @@ class ComponentBasedEnvironment(gym.Env):
 
     def _build_env_state_dict(
         self, agent_state: Optional[AgentState] = None
-    ) -> dict[str, Any]:
+    ) -> EnvState:
         state = agent_state or self._agent_state
 
         return {

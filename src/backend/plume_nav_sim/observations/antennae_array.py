@@ -5,6 +5,8 @@ from typing import Any, Dict, List
 import gymnasium as gym
 import numpy as np
 
+from ..core.types import EnvState
+
 try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray
 except ImportError:  # pragma: no cover
@@ -46,7 +48,7 @@ class AntennaeArraySensor:
     def observation_space(self) -> gym.Space:
         return self._observation_space
 
-    def get_observation(self, env_state: Dict[str, Any]) -> NDArray[np.floating]:
+    def get_observation(self, env_state: EnvState) -> NDArray[np.floating]:
         agent_state = env_state["agent_state"]
         plume_field = env_state["plume_field"]
         grid_size = env_state["grid_size"]

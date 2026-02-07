@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import gymnasium as gym
 import numpy as np
 
 from plume_nav_sim.constants import MOVEMENT_VECTORS
+from plume_nav_sim.core import EnvState
 from plume_nav_sim.core.enums import Action
 from plume_nav_sim.core.geometry import Coordinates
 
@@ -131,7 +132,7 @@ class SemanticAnemotaxisActionWrapper(gym.ActionWrapper):
             )
         return semantic
 
-    def _try_build_env_state(self) -> Optional[Dict[str, Any]]:
+    def _try_build_env_state(self) -> Optional[EnvState]:
         builder = getattr(self.env, "_build_env_state_dict", None)
         if callable(builder):
             try:

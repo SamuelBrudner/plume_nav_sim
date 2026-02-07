@@ -5,6 +5,8 @@ from typing import Any, Dict
 import gymnasium as gym
 import numpy as np
 
+from ..core.types import EnvState
+
 try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray
 except ImportError:  # pragma: no cover
@@ -27,7 +29,7 @@ class WindVectorSensor:
         """Gymnasium observation space."""
         return self._observation_space
 
-    def get_observation(self, env_state: Dict[str, Any]) -> NDArray[np.floating]:
+    def get_observation(self, env_state: EnvState) -> NDArray[np.floating]:
         """Sample wind vector at the agent's position."""
         base_vector = self._sample_base_vector(env_state)
         if self.noise_std <= 0.0:
@@ -49,7 +51,7 @@ class WindVectorSensor:
             "observation_dtype": "float32",
         }
 
-    def _sample_base_vector(self, env_state: Dict[str, Any]) -> NDArray[np.floating]:
+    def _sample_base_vector(self, env_state: EnvState) -> NDArray[np.floating]:
         agent_state = env_state["agent_state"]
         wind_field = env_state.get("wind_field")
         if wind_field is None:

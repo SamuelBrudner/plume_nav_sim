@@ -3,6 +3,8 @@ from typing import Any, Dict, Protocol, Union, runtime_checkable
 import gymnasium as gym
 import numpy as np
 
+from ..core.types import EnvState
+
 try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray
 except ImportError:  # pragma: no cover
@@ -18,7 +20,7 @@ class ObservationModel(Protocol):
     def observation_space(self) -> gym.Space:
         ...
 
-    def get_observation(self, env_state: Dict[str, Any]) -> ObservationType:
+    def get_observation(self, env_state: EnvState) -> ObservationType:
         ...
 
     def get_metadata(self) -> Dict[str, Any]:
