@@ -223,7 +223,7 @@ def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
     _add_if_not_none(kwargs, "reward_type", spec.reward_type)
 
     # Plume configuration: SimulationSpec exposes plume_sigma directly,
-    # but the PlumeSearchEnv wrapper expects plume_params.sigma.
+    # while make_env compatibility routing consumes plume_params.sigma.
     if spec.plume_sigma is not None:
         kwargs["plume_params"] = {"sigma": float(spec.plume_sigma)}
 

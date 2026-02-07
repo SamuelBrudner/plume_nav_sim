@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Dict, Optional
+from typing import Dict, Mapping, Optional
 
 from .core import (
     DEFAULT_GOAL_RADIUS,
@@ -39,34 +39,22 @@ from .envs.config_types import EnvironmentConfig, create_environment_config
 # Predeclare symbols with precise optional types to satisfy mypy strict rules.
 PlumeEnv: Optional[object]
 create_plume_env: Optional[object]
-PlumeSearchEnv: Optional[object]
-create_plume_search_env: Optional[object]
+create_component_environment: Optional[object]
 _ENV_IMPORT_ERROR: Optional[Exception] = None
 
 try:
     from .envs import PlumeEnv as _PlumeEnv
+    from .envs import create_component_environment as _create_component_environment
     from .envs import create_plume_env as _create_plume_env
 
     PlumeEnv = _PlumeEnv
     create_plume_env = _create_plume_env
+    create_component_environment = _create_component_environment
 except Exception as env_import_error:  # pragma: no cover - optional dependency guard
     PlumeEnv = None
     create_plume_env = None
+    create_component_environment = None
     _ENV_IMPORT_ERROR = env_import_error
-
-try:
-    from .envs.plume_search_env import PlumeSearchEnv as _PlumeSearchEnv
-    from .envs.plume_search_env import (
-        create_plume_search_env as _create_plume_search_env,
-    )
-
-    PlumeSearchEnv = _PlumeSearchEnv
-    create_plume_search_env = _create_plume_search_env
-except Exception as env_import_error:  # pragma: no cover - optional dependency guard
-    PlumeSearchEnv = None
-    create_plume_search_env = None
-    if _ENV_IMPORT_ERROR is None:
-        _ENV_IMPORT_ERROR = env_import_error
 
 
 def initialize_package(  # noqa: C901
@@ -160,8 +148,8 @@ def get_package_info(
             environment_details["available"].append("PlumeEnv")
             environment_details["factory"] = "create_plume_env"
             environment_details["module"] = "plume_nav_sim.envs.plume_env"
-        if PlumeSearchEnv is not None:
-            environment_details["available"].append("PlumeSearchEnv")
+        if create_component_environment is not None:
+            environment_details["available"].append("ComponentBasedEnvironment")
         if not environment_details["available"]:
             environment_details["error"] = str(_ENV_IMPORT_ERROR)
 
@@ -197,16 +185,27 @@ def make_env(**kwargs):
     uses_legacy = uses_legacy or any(k in kwargs for k in legacy_keys)
 
     if uses_legacy:
-        if create_plume_search_env is None:
+        if create_component_environment is None:
             raise RuntimeError(
-                "Legacy PlumeSearchEnv not available to handle legacy kwargs."
+                "Component environment factory not available to handle compatibility kwargs."
             )
+        component_kwargs = dict(kwargs)
+        source_location = component_kwargs.pop("source_location", None)
+        if source_location is not None and "goal_location" not in component_kwargs:
+            component_kwargs["goal_location"] = source_location
+        plume_params = component_kwargs.pop("plume_params", None)
+        if plume_params is not None and "plume_sigma" not in component_kwargs:
+            if isinstance(plume_params, Mapping):
+                sigma_value = plume_params.get("sigma")
+                if sigma_value is not None:
+                    component_kwargs["plume_sigma"] = float(sigma_value)
+
         warnings.warn(
-            "make_env received legacy kwargs; falling back to deprecated PlumeSearchEnv.",
+            "make_env received compatibility kwargs; routing to component environment factory.",
             DeprecationWarning,
             stacklevel=2,
         )
-        return create_plume_search_env(**kwargs)
+        return create_component_environment(**component_kwargs)
 
     if create_plume_env is None:
         raise RuntimeError(
@@ -264,8 +263,7 @@ __all__ = [
     # Environments
     "PlumeEnv",
     "create_plume_env",
-    "PlumeSearchEnv",
-    "create_plume_search_env",
+    "create_component_environment",
     "initialize_package",
     "get_package_info",
     "get_conf_dir",

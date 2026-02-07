@@ -263,8 +263,11 @@ class ComponentBasedEnvironment(gym.Env):
             f"{self._step_count} total steps"
         )
 
-    def render(self) -> Optional[np.ndarray]:
-        if self.render_mode != "rgb_array":
+    def render(self, mode: Optional[str] = None) -> Optional[np.ndarray]:
+        effective_mode = self.render_mode if mode is None else mode
+        if effective_mode not in {None, "human", "rgb_array"}:
+            raise ValueError(f"Unsupported render mode: {effective_mode}")
+        if effective_mode != "rgb_array":
             return None
 
         height, width = self.grid_size.height, self.grid_size.width

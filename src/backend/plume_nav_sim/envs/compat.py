@@ -27,11 +27,6 @@ from ..registration.register import ENV_ID, is_registered, register_env, unregis
 from .component_env import ComponentBasedEnvironment
 from .factory import create_component_environment
 from .plume_env import PlumeEnv, create_plume_env
-from .plume_search_env import (
-    PlumeSearchEnv,
-    create_plume_search_env,
-    validate_plume_search_config,
-)
 from .state import EnvironmentState
 
 ENVIRONMENT_VERSION = "1.0.0"
@@ -40,9 +35,7 @@ SUPPORTED_ENVIRONMENTS = [
     "plume_env",
     "plume",
     "PlumeEnv",
-    "plume_search",
     "component",
-    "PlumeSearchEnv",
 ]
 
 _module_logger = get_component_logger("envs")
@@ -53,9 +46,6 @@ __all__ = [
     "EnvironmentState",
     "ComponentBasedEnvironment",
     "create_component_environment",
-    "PlumeSearchEnv",
-    "create_plume_search_env",
-    "validate_plume_search_config",
     "register_env",
     "unregister_env",
     "is_registered",
@@ -162,20 +152,6 @@ def create_environment(  # noqa: C901
                 render_mode=effective_render_mode,
                 **plume_env_kwargs,
             )
-        elif effective_env_type in ("plume_search", "PlumeSearchEnv"):
-            warnings.warn(
-                "env_type 'plume_search' is deprecated; use 'plume_env' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            environment = create_plume_search_env(
-                grid_size=effective_grid_size,
-                source_location=effective_source_location,
-                max_steps=effective_max_steps,
-                goal_radius=effective_goal_radius,
-                render_mode=effective_render_mode,
-                env_options=env_options,
-            )
         elif effective_env_type == "component":
             warnings.warn(
                 "env_type 'component' is deprecated; use 'plume_env' instead.",
@@ -237,7 +213,7 @@ def make_environment(  # noqa: C901
     make_start_time = time.perf_counter()
 
     try:
-        effective_env_type = env_type or "plume_search"
+        effective_env_type = env_type or "plume_env"
         effective_env_config = env_config or {}
 
         _module_logger.debug(
@@ -402,17 +378,6 @@ def get_environment_info(
                     "termination_condition": "Agent reaches source location within goal_radius",
                     "truncation_condition": "Episode exceeds max_steps limit",
                     "plume_model": "Gaussian or video plume backends",
-                }
-            elif effective_env_type in ("plume_search", "PlumeSearchEnv"):
-                environment_info["plume_search_details"] = {
-                    "description": "Legacy plume search wrapper environment (deprecated)",
-                    "observation_type": "Concentration value at agent position",
-                    "action_type": "Discrete cardinal directions (Up, Right, Down, Left)",
-                    "reward_structure": "Sparse reward (1.0 for goal, 0.0 otherwise)",
-                    "termination_condition": "Agent reaches source location within goal_radius",
-                    "truncation_condition": "Episode exceeds max_steps limit",
-                    "plume_model": "Static Gaussian distribution with configurable dispersion",
-                    "deprecated": True,
                 }
             elif effective_env_type == "component":
                 environment_info["component_details"] = {

@@ -12,6 +12,8 @@ import os
 import queue
 import threading
 import warnings
+from dataclasses import dataclass
+from typing import Any, Optional
 
 import matplotlib
 import numpy as np
@@ -24,8 +26,55 @@ except ImportError:  # pragma: no cover - guard validated via tests
     _psutil = None
 
 from plume_nav_sim.core.types import Coordinates, GridSize
-from plume_nav_sim.render.base_renderer import create_render_context
-from tests.test_rendering import create_dual_mode_test_environment
+from plume_nav_sim.envs.plume_env import create_plume_env
+
+
+@dataclass(frozen=True)
+class RenderContext:
+    concentration_field: np.ndarray
+    agent_position: Coordinates
+    source_position: Coordinates
+    grid_size: GridSize
+
+
+def create_render_context(
+    *,
+    concentration_field: np.ndarray,
+    agent_position: Coordinates,
+    source_position: Coordinates,
+    grid_size: GridSize,
+) -> RenderContext:
+    return RenderContext(
+        concentration_field=concentration_field,
+        agent_position=agent_position,
+        source_position=source_position,
+        grid_size=grid_size,
+    )
+
+
+def create_dual_mode_test_environment(
+    grid_size: tuple[int, int] = (32, 32),
+    initial_render_mode: str = "rgb_array",
+    test_config: Optional[dict[str, Any]] = None,
+    enable_performance_monitoring: bool = True,
+):
+    del enable_performance_monitoring  # compatibility placeholder
+    config = dict(test_config or {})
+    env_kwargs: dict[str, Any] = {
+        "grid_size": grid_size,
+        "render_mode": initial_render_mode,
+    }
+    for key in (
+        "source_location",
+        "start_location",
+        "goal_radius",
+        "max_steps",
+        "plume",
+        "plume_params",
+    ):
+        if key in config:
+            env_kwargs[key] = config[key]
+    return create_plume_env(**env_kwargs)
 
 __all__ = [
     "_require_psutil",

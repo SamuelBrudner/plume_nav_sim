@@ -1,7 +1,7 @@
 {
-  "pid": 74771,
-  "parent_pid": 74762,
-  "database": "/Users/samuelbrudner/CascadeProjects/plume_nav_sim/.beads/plume_nav_sim.db",
-  "version": "0.49.0",
-  "started_at": "2026-01-31T01:52:47.626242Z"
+  "pid": 61329,
+  "parent_pid": 61312,
+  "database": "/Users/samuelbrudner/Documents/GitHub/plume_nav_sim/.beads/beads.db",
+  "version": "0.49.4",
+  "started_at": "2026-02-07T17:03:55.096683Z"
 }

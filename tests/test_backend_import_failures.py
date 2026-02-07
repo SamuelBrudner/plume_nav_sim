@@ -19,21 +19,18 @@ for path in (PROJECT_ROOT, SRC_ROOT, BACKEND_SRC):
 
 
 @pytest.mark.usefixtures("monkeypatch")
-def test_performance_module_missing_psutil_is_error(monkeypatch):
-    """Importing the performance tests without psutil should raise instead of skipping."""
-    module_name = "src.backend.tests.test_performance"
+def test_backend_conftest_missing_psutil_is_error(monkeypatch):
+    """The shared backend conftest should fail loudly when psutil is unavailable."""
+    module_name = "src.backend.tests.conftest"
     sys.modules.pop(module_name, None)
 
     # Make sure psutil import fails loudly.
     monkeypatch.setitem(sys.modules, "psutil", None)
+    module = importlib.import_module(module_name)
+    monkeypatch.setattr(module, "_psutil", None, raising=False)
 
     with pytest.raises(RuntimeError) as excinfo:
-        try:
-            importlib.import_module(module_name)
-        except Skipped as skipped_exc:  # pragma: no cover - triggers red phase
-            raise AssertionError(
-                "performance tests should fail, not skip, when psutil is missing"
-            ) from skipped_exc
+        module._require_psutil()
 
     assert "psutil" in str(excinfo.value)
 
