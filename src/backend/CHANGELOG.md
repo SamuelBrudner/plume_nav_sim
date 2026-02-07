@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-commit notebook hygiene: local hook and script to strip `.ipynb` outputs.
 
 ### Changed
-- Legacy `PlumeSearchEnv` remains the default, but registration now logs an INFO hint about upcoming deprecation and DI opt-in options.
+- `PlumeEnv` remains the default, but registration now logs an INFO hint about upcoming deprecation and DI opt-in options.
 - TD policies refactored to probe-after-turn gating and unified `dC` computation.
 - Compose builders/specs extended for new builtin policies (`run_tumble_td`, `stochastic_run_tumble_td`) and mappings (e.g., `greedy_td`).
 
@@ -58,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Core Environment Implementation
-- **PlumeSearchEnv**: Complete Gymnasium-compatible RL environment for plume navigation
+- **PlumeEnv**: Complete Gymnasium-compatible RL environment for plume navigation
 - **Static Gaussian Plume Model**: Mathematical implementation with configurable dispersion parameters
 - **Discrete Action Space**: Cardinal direction navigation (UP=0, RIGHT=1, DOWN=2, LEFT=3)
 - **Single-Agent Navigation**: Grid-based movement with boundary enforcement

@@ -648,7 +648,7 @@ def test_grid_size():
 @pytest.fixture
 def test_environment(test_grid_size):
     """Fully configured test environment."""
-    env = create_plume_search_env(
+    env = create_plume_env(
         grid_size=test_grid_size,
         seed=42
     )

@@ -158,7 +158,7 @@ python scripts/run_tests.py --categories performance
 ## 🛡️ Compatibility and Standards
 
 ### API Compatibility
-- [ ] **Gymnasium API compliance maintained** (reset/step/render/close methods)
+- [ ] **Gymnasium API compliance maintained** (reset, step, render, close methods)
 - [ ] **Backward compatibility preserved** (existing code continues to work)
 - [ ] **Action/Observation spaces unchanged** (or properly versioned)
 - [ ] **Return formats consistent** (5-tuple for step(), 2-tuple for reset())

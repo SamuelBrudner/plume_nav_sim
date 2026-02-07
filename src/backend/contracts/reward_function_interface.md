@@ -428,7 +428,7 @@ class StepPenaltyReward:
 ### Environment Integration
 
 ```python
-class PlumeSearchEnv:
+class PlumeEnv:
     def __init__(
         self,
         reward_fn: Optional[RewardFunction] = None,

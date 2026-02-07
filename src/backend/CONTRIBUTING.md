@@ -149,7 +149,7 @@ Use these namespaces when extending plume-nav-sim:
 - **Plume models and concentration fields**:
   - `plume_nav_sim.plume` – plume model implementations (e.g., static Gaussian) and related utilities.
 - **Rendering and visualization**:
-  - `plume_nav_sim.render` – rendering utilities, colormaps, and templates.
+  - Use `PlumeEnv` / `ComponentBasedEnvironment` `render()` methods and the media/video packages.
 - **Data capture and datasets**:
   - `plume_nav_sim.data_capture` – runtime capture pipeline, recorders, and validation.
   - `plume_nav_sim.media` – dataset manifests, metadata, and validation utilities.
@@ -358,7 +358,7 @@ from plume_nav_sim.core.geometry import Coordinates
 from plume_nav_sim.core.enums import Action
 
 
-class PlumeSearchEnvironment:
+class PlumeEnvironment:
     """Plume navigation environment following Gymnasium API.
     
     This class implements a reinforcement learning environment for chemical
@@ -511,7 +511,7 @@ Our comprehensive test infrastructure provides:
 ```python
 # Example test using provided fixtures
 import pytest
-from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
+from plume_nav_sim.envs.plume_env import PlumeEnv
 
 
 def test_environment_step_performance(performance_test_env, performance_tracker):
@@ -856,14 +856,14 @@ def calculate_reward(self, agent_position: Coordinates) -> float:
 ```python
 """Plume navigation environment implementation.
 
-This module provides the core PlumeSearchEnv class implementing the Gymnasium
+This module provides the core PlumeEnv class implementing the Gymnasium
 environment interface for chemical plume navigation research. The environment
 features a static Gaussian plume model with discrete agent movement and
 binary reward structure optimized for reinforcement learning research.
 
 Key Components:
-    PlumeSearchEnv: Main environment class with Gymnasium API compliance
-    create_plume_search_env: Factory function for environment creation
+    PlumeEnv: Main environment class with Gymnasium API compliance
+    create_plume_env: Factory function for environment creation
     
 Performance Characteristics:
     Step Latency: <1ms per environment step

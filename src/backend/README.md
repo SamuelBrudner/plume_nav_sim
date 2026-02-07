@@ -129,7 +129,6 @@ Contributors extending the library (e.g., new policies, plume models, or data-ca
 - `plume_nav_sim.envs` – environment implementations and factories.
 - `plume_nav_sim.policies` – policies and policy helpers.
 - `plume_nav_sim.plume` – plume models and concentration field logic.
-- `plume_nav_sim.render` – rendering utilities, colormaps, and templates.
 - `plume_nav_sim.data_capture`, `plume_nav_sim.media`, `plume_nav_sim.video` – capture pipeline, dataset manifests, and video plume schemas.
 
 ### Quick Start with Factory Function
@@ -172,9 +171,10 @@ result = runner.run_episode(
 
 ## 📖 API Reference
 
-### Environment Class: `PlumeSearchEnv`
+### Environment Classes: `PlumeEnv` and `ComponentBasedEnvironment`
 
-The core Gymnasium environment for plume navigation simulation.
+Use `PlumeEnv` as the primary Gymnasium environment. Use
+`ComponentBasedEnvironment` when you need explicit component injection.
 
 #### Action Space
 
@@ -568,7 +568,7 @@ def create_custom_environment(difficulty='medium'):
     }
     
     config = difficulty_configs.get(difficulty, difficulty_configs['medium'])
-    return plume_nav_sim.create_plume_search_env(**config)
+    return plume_nav_sim.create_plume_env(**config)
 
 # Usage
 env = create_custom_environment('hard')
@@ -781,13 +781,11 @@ python examples/visualization_demo.py
 python examples/performance_benchmark.py
 ```
 
-### Render Module Structure
+### Rendering
 
-- All render-specific Python code and utilities live under `src/backend/plume_nav_sim/render/`.
-- Use `plume_nav_sim.render.*` imports exclusively for rendering utilities.
-- Colormap utilities moved to `plume_nav_sim.render.colormaps` (formerly `assets.default_colormap`).
-- Rendering templates moved to `plume_nav_sim.render.templates` (formerly `assets.render_templates`).
-- The legacy `src/backend/assets/` package has been removed.
+- Use the environment `render()` method (`mode="rgb_array"` or `mode="human"`).
+- Rendering is implemented directly by `PlumeEnv` and `ComponentBasedEnvironment`.
+- There is no standalone `render` package in the current codebase.
 
 ### Contribution Guidelines
 

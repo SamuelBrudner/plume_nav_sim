@@ -286,7 +286,7 @@ class ConcentrationSensor:
 
 
 # Usage - simple and convenient
-env = PlumeSearchEnv(
+env = PlumeEnv(
     observation_model=ConcentrationSensor()  # Just works!
 )
 ```
@@ -394,7 +394,7 @@ class WindSensor:
 
 
 # Usage - environment needs to provide wind_field
-env = PlumeSearchEnv(
+env = PlumeEnv(
     observation_model=WindSensor(),
     wind_model=ConstantWindModel(direction=45, speed=0.5)  # Adds wind_field to env_state
 )
@@ -441,7 +441,7 @@ class MultiModalSensor:
 
 
 # Usage - odor + wind sensing
-env = PlumeSearchEnv(
+env = PlumeEnv(
     observation_model=MultiModalSensor({
         'odor': ConcentrationSensor(),
         'wind': WindSensor(),
@@ -510,7 +510,7 @@ class FlattenedMultiSensor:
 
 
 # Usage - single flat vector
-env = PlumeSearchEnv(
+env = PlumeEnv(
     observation_model=FlattenedMultiSensor([
         ConcentrationSensor(),      # dim 1
         WindSensor(),               # dim 2
@@ -590,7 +590,7 @@ class TestObservationModelInterface:
 - Config-driven environments (e.g., `EnvironmentConfig` → `create_environment_from_config`) automatically inject a constant wind field when `wind` is provided and pass it through `env_state['wind_field']`.
 
 ```python
-class PlumeSearchEnv:
+class PlumeEnv:
     def __init__(
         self,
         observation_model: Optional[ObservationModel] = None,

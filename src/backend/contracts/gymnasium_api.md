@@ -22,7 +22,7 @@ This environment implements the [Gymnasium v0.29+ API](https://gymnasium.farama.
 ### Required Interface
 
 ```python
-class PlumeSearchEnv(gymnasium.Env):
+class PlumeEnv(gymnasium.Env):
     """Gymnasium-compatible environment for plume search.
     
     Standard Methods:
@@ -81,7 +81,7 @@ observation_space = self.obs_model.observation_space
 ObservationType = type(self.obs_model.observation_space.sample())
 ```
 
-- **Wrapper default (`PlumeSearchEnv`)** – `Dict` with keys:
+- **Wrapper default (`PlumeEnv`)** – `Dict` with keys:
   - `agent_position`: `Box(shape=(2,), dtype=float32)`
   - `sensor_reading`: `Box(low=0.0, high=1.0, shape=(1,), dtype=float32)`
   - `source_location`: `Box(shape=(2,), dtype=float32)`
@@ -336,7 +336,7 @@ def close(self) -> None:
 
 ```python
 # G1: State consistency
-∀ env: PlumeSearchEnv:
+∀ env: PlumeEnv:
   env.observation_space defined
   env.action_space defined
   env.metadata defined
@@ -424,12 +424,12 @@ def test_gymnasium_api_compliance():
     """Environment satisfies Gymnasium API."""
     from gymnasium.utils.env_checker import check_env
     
-    env = PlumeSearchEnv()
+    env = PlumeEnv()
     check_env(env)  # Official Gymnasium checker
 
 def test_observation_space_consistency():
     """All observations match declared space."""
-    env = PlumeSearchEnv()
+    env = PlumeEnv()
     obs, info = env.reset(seed=42)
     
     assert obs in env.observation_space
@@ -444,7 +444,7 @@ def test_observation_space_consistency():
 
 def test_action_space_validation():
     """Invalid actions rejected."""
-    env = PlumeSearchEnv()
+    env = PlumeEnv()
     env.reset(seed=42)
     
     # Valid actions
@@ -461,7 +461,7 @@ def test_action_space_validation():
 
 def test_info_keys_present():
     """Info dict has required keys."""
-    env = PlumeSearchEnv()
+    env = PlumeEnv()
     obs, info = env.reset(seed=42)
     
     assert "seed" in info
@@ -473,8 +473,8 @@ def test_info_keys_present():
 
 def test_determinism():
     """Same seed produces same trajectory."""
-    env1 = PlumeSearchEnv()
-    env2 = PlumeSearchEnv()
+    env1 = PlumeEnv()
+    env2 = PlumeEnv()
     
     obs1, _ = env1.reset(seed=42)
     obs2, _ = env2.reset(seed=42)

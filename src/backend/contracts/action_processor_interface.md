@@ -549,7 +549,7 @@ def test_edge_actions(action_proc):
 ### Environment Integration
 
 ```python
-class PlumeSearchEnv:
+class PlumeEnv:
     def __init__(
         self,
         action_processor: Optional[ActionProcessor] = None,

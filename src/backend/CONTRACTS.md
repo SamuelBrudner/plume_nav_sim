@@ -682,7 +682,7 @@ validate_seed_value(seed)  # Single validation entrypoint
 
 ### Gymnasium Compliance:
 
-**PlumeSearchEnv inherits from `gymnasium.Env`** and follows modern Gymnasium API (v1.0+):
+**PlumeEnv inherits from `gymnasium.Env`** and follows modern Gymnasium API (v1.0+):
 
 ```python
 # Standard RL loop MUST work:

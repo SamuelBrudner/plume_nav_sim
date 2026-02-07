@@ -219,5 +219,5 @@ returning your implementation.
 
 ## Backward Compatibility
 
-The legacy `PlumeSearchEnv` remains supported, but new work should target `PlumeEnv`
-or manual component injection.
+For new work, target `PlumeEnv`, `ComponentBasedEnvironment`, or manual component
+injection.

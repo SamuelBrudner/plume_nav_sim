@@ -9,12 +9,12 @@
 
 ## 📦 Public API for Extensions
 
-### PlumeSearchEnv Public Attributes
+### PlumeEnv Public Attributes
 
 **For Wrappers and Subclasses:**
 
 ```python
-class PlumeSearchEnv(gym.Env):
+class PlumeEnv(gym.Env):
     """
     Public Attributes (safe to access):
         agent_state (AgentState): Current agent position and orientation
@@ -44,7 +44,7 @@ class MyWrapper(gym.Wrapper):
 **Subclass Pattern:**
 
 ```python
-class MyEnv(PlumeSearchEnv):
+class MyEnv(PlumeEnv):
     def _get_env_state(self):
         state = super()._get_env_state()
         state['my_custom_field'] = self.my_data  # Add custom state
@@ -76,7 +76,7 @@ This document provides the **high-level architecture** tying together:
 
 ```
 ┌─────────────────────────────────────┐
-│      PlumeSearchEnv                 │
+│      PlumeEnv                 │
 │                                     │
 │  Orchestrates components via        │
 │  dependency injection               │
@@ -150,7 +150,7 @@ Implementations may ignore unused keys. Custom environments or wrappers may exte
 ### Full Dependency Injection
 
 ```python
-class PlumeSearchEnv(gym.Env):
+class PlumeEnv(gym.Env):
     """Plume navigation environment with injectable components.
     
     Supports three initialization patterns:
@@ -273,7 +273,7 @@ class TestComponentIntegration:
         custom_reward = DenseDistanceReward(decay=0.95)
         custom_obs = AntennaeArrayObservation([(0,0), (1,0)])
         
-        env = PlumeSearchEnv(
+        env = PlumeEnv(
             reward_fn=custom_reward,
             observation_model=custom_obs
         )
@@ -297,7 +297,7 @@ class TestComponentIntegration:
             observation=ObservationConfig(type='single_sensor')
         )
         
-        env = PlumeSearchEnv(config=config)
+        env = PlumeEnv(config=config)
         
         # Verify config was applied
         assert env.grid_size == GridSize(64, 64)
@@ -310,7 +310,7 @@ class TestComponentIntegration:
     
     def test_kwargs_backward_compatibility(self):
         """Pattern 3: Legacy kwargs."""
-        env = PlumeSearchEnv(
+        env = PlumeEnv(
             grid_size=(100, 100),
             source_location=(50, 50),
             max_steps=750,
@@ -410,7 +410,7 @@ def create_action_processor(config: ActionConfig) -> ActionProcessor:
 Components with internal state must implement `reset()`:
 
 ```python
-class PlumeSearchEnv:
+class PlumeEnv:
     def reset(self, *, seed=None, options=None):
         """Reset environment and component state."""
         # Reset RNG

@@ -1,6 +1,6 @@
 # Environment State Machine Contract
 
-**Component:** `PlumeSearchEnv`  
+**Component:** `PlumeEnv`  
 **Version:** 2.0.0  
 **Date:** 2025-10-01  
 **Status:** CANONICAL - All implementations MUST conform
@@ -510,7 +510,7 @@ From CLOSED:
 
 ```python
 # Calling step before reset
-env = PlumeSearchEnv()
+env = PlumeEnv()
 env.step(0)  # StateError!
 
 # Using after close
@@ -525,7 +525,7 @@ env._state = EnvironmentState.READY  # Breaks invariants!
 
 ```python
 # Proper lifecycle
-env = PlumeSearchEnv()
+env = PlumeEnv()
 obs, info = env.reset(seed=42)
 obs, reward, terminated, truncated, info = env.step(0)
 if terminated or truncated:
