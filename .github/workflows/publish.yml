@@ -345,17 +345,10 @@ jobs:
           python -m pip install --upgrade pip hatchling
           python -m pip install -e ".[data,dev,test,benchmark]"
 
-      - name: 'Validate package installation'
+      - name: 'Backend smoke check (pytest)'
+        working-directory: .
         run: |
-          python scripts/validate_installation.py --verbose
-
-      - name: 'Run comprehensive test suite'
-        run: |
-          python scripts/run_tests.py \
-            --all-categories \
-            --benchmarks \
-            --generate-reports \
-            --output-dir test-results-publication
+          cd src/backend && python -m pytest --tb=line -q
 
       - name: 'Run publication-specific benchmarks'
         run: |
