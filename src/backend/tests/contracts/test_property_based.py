@@ -268,73 +268,63 @@ class TestRewardCalculationProperties:
         st.floats(min_value=0.0, max_value=50.0),
     )
     def test_goal_reached_consistent_with_distance(self, x1, y1, x2, y2, goal_radius):
-        """Property: goal_reached flag consistent with distance <= goal_radius."""
-        from plume_nav_sim.core.reward_calculator import (
-            RewardCalculator,
-            RewardCalculatorConfig,
-        )
+        """Property: reward consistent with distance <= goal_radius."""
+        from plume_nav_sim.core.types import AgentState
+        from plume_nav_sim.rewards.sparse_goal import SparseGoalReward
 
-        config = RewardCalculatorConfig(
-            goal_radius=goal_radius,
-            reward_goal_reached=1.0,
-            reward_default=0.0,
-        )
-        calculator = RewardCalculator(config=config)
+        if goal_radius <= 0:
+            return  # SparseGoalReward requires positive radius
+
+        goal_pos = Coordinates(x=x2, y=y2)
+        reward_fn = SparseGoalReward(goal_position=goal_pos, goal_radius=goal_radius)
 
         agent_pos = Coordinates(x=x1, y=y1)
-        goal_pos = Coordinates(x=x2, y=y2)
+        prev_state = AgentState(position=Coordinates(0, 0))
+        next_state = AgentState(position=agent_pos)
 
-        result = calculator.calculate_reward(
-            agent_position=agent_pos,
-            source_location=goal_pos,
+        reward = reward_fn.compute_reward(
+            prev_state=prev_state,
+            action=0,
+            next_state=next_state,
+            plume_field=np.zeros((1,)),
         )
 
         distance = calculate_euclidean_distance(agent_pos, goal_pos)
-        expected_goal_reached = distance <= goal_radius
+        expected_reward = 1.0 if distance <= goal_radius else 0.0
 
-        assert result.goal_reached == expected_goal_reached
+        assert reward == expected_reward
 
     @given(
         st.floats(min_value=0.0, max_value=10.0),
         st.floats(min_value=0.0, max_value=10.0),
     )
     def test_reward_values_within_bounds(self, reward_goal, reward_default):
-        """Property: Calculated rewards are always within [min, max] of config."""
-        from plume_nav_sim.core.reward_calculator import (
-            RewardCalculator,
-            RewardCalculatorConfig,
-        )
-
-        # Skip if rewards are too close (validation requires difference for learning signal)
-        if abs(reward_goal - reward_default) < 1e-6:
-            return
+        """Property: SparseGoalReward always returns 0.0 or 1.0."""
+        from plume_nav_sim.core.types import AgentState
+        from plume_nav_sim.rewards.sparse_goal import SparseGoalReward
 
         # Skip non-finite values
         if not (np.isfinite(reward_goal) and np.isfinite(reward_default)):
             return
 
-        config = RewardCalculatorConfig(
-            goal_radius=5.0,
-            reward_goal_reached=reward_goal,
-            reward_default=reward_default,
-        )
-        calculator = RewardCalculator(config=config)
+        goal_pos = Coordinates(x=5, y=5)
+        reward_fn = SparseGoalReward(goal_position=goal_pos, goal_radius=5.0)
 
         # Test various positions
-        for x1, y1, x2, y2 in [(0, 0, 0, 0), (0, 0, 10, 10), (5, 5, 5, 5)]:
+        for x1, y1 in [(0, 0), (5, 5), (10, 10)]:
             agent_pos = Coordinates(x=x1, y=y1)
-            goal_pos = Coordinates(x=x2, y=y2)
+            prev_state = AgentState(position=Coordinates(0, 0))
+            next_state = AgentState(position=agent_pos)
 
-            result = calculator.calculate_reward(
-                agent_position=agent_pos,
-                source_location=goal_pos,
+            reward = reward_fn.compute_reward(
+                prev_state=prev_state,
+                action=0,
+                next_state=next_state,
+                plume_field=np.zeros((1,)),
             )
 
-            # Reward must be one of the configured values
-            min_reward = min(reward_goal, reward_default)
-            max_reward = max(reward_goal, reward_default)
-
-            assert min_reward <= result.reward <= max_reward
+            # SparseGoalReward always returns 0.0 or 1.0
+            assert reward in (0.0, 1.0)
 
 
 class TestActionSpaceProperties:
@@ -372,25 +362,19 @@ class TestBoundaryEnforcementProperties:
         st.integers(min_value=0, max_value=199),
         st.integers(min_value=0, max_value=3),  # action
     )
-    def test_enforce_movement_bounds_returns_valid_position(
+    def test_clamped_position_stays_in_bounds(
         self, width, height, x, y, action
     ):
-        """Property: enforce_movement_bounds always returns in-bounds position."""
-        from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
-
+        """Property: clamping a position to grid bounds keeps it in-bounds."""
         # Clamp initial position to bounds
-        x = min(x, width - 1)
-        y = min(y, height - 1)
+        cx = min(max(x, 0), width - 1)
+        cy = min(max(y, 0), height - 1)
 
         grid = GridSize(width=width, height=height)
-        enforcer = BoundaryEnforcer(grid_size=grid)
+        coord = Coordinates(x=cx, y=cy)
 
-        coord = Coordinates(x=x, y=y)
-        result = enforcer.enforce_movement_bounds(coord, action)
-
-        # Result position must be within bounds
-        assert 0 <= result.final_position.x < width
-        assert 0 <= result.final_position.y < height
+        # Position must be within bounds
+        assert grid.contains(coord), f"Clamped ({cx},{cy}) not in {grid}"
 
     @given(
         st.integers(min_value=10, max_value=50),
@@ -398,23 +382,18 @@ class TestBoundaryEnforcementProperties:
         st.integers(min_value=0, max_value=49),
         st.integers(min_value=0, max_value=49),
     )
-    def test_validate_position_accepts_valid_positions(self, width, height, x, y):
-        """Property: validate_position accepts positions within bounds."""
-        from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
-
+    def test_grid_contains_accepts_valid_positions(self, width, height, x, y):
+        """Property: GridSize.contains accepts positions within bounds."""
         grid = GridSize(width=width, height=height)
-        enforcer = BoundaryEnforcer(grid_size=grid)
 
         # Clamp to bounds
         x = min(x, width - 1)
         y = min(y, height - 1)
 
         coord = Coordinates(x=x, y=y)
-        # Should not raise when position is valid and raise_on_invalid=True
-        is_valid = enforcer.validate_position(coord, raise_on_invalid=False)
 
         # Position within bounds should be valid
-        assert is_valid is True
+        assert grid.contains(coord) is True
 
 
 class TestConfigurationProperties:
@@ -442,32 +421,18 @@ class TestConfigurationProperties:
         st.floats(min_value=0.0, max_value=10.0),
         st.floats(min_value=-1.0, max_value=1.0),
     )
-    def test_reward_config_accepts_finite_values(
+    def test_environment_config_accepts_finite_goal_radius(
         self, goal_radius, reward_goal, reward_default
     ):
-        """Property: RewardCalculatorConfig accepts finite numeric values."""
-        from plume_nav_sim.core.reward_calculator import RewardCalculatorConfig
+        """Property: EnvironmentConfig accepts valid goal_radius."""
+        from plume_nav_sim.envs.config_types import EnvironmentConfig
 
-        # Skip NaN and infinite values
-        if not (
-            np.isfinite(goal_radius)
-            and np.isfinite(reward_goal)
-            and np.isfinite(reward_default)
-        ):
+        # Skip NaN, infinite, and negative values
+        if not np.isfinite(goal_radius) or goal_radius < 0:
             return
 
-        if goal_radius < 0:
-            return  # Invalid
-
-        config = RewardCalculatorConfig(
-            goal_radius=goal_radius,
-            reward_goal_reached=reward_goal,
-            reward_default=reward_default,
-        )
-
+        config = EnvironmentConfig(goal_radius=goal_radius)
         assert config.goal_radius == goal_radius
-        assert config.reward_goal_reached == reward_goal
-        assert config.reward_default == reward_default
 
 
 class TestMathematicalProperties:

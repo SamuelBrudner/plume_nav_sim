@@ -66,14 +66,10 @@ class TestPositionInvariant:
                 break
 
     def test_boundary_enforcement_prevents_out_of_bounds(self):
-        """Boundary enforcer must prevent out-of-bounds positions."""
-        from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
-
+        """GridSize.contains must reject out-of-bounds positions."""
         grid_size = GridSize(width=10, height=10)
-        enforcer = BoundaryEnforcer(grid_size)
 
-        # Try invalid positions - note: Coordinates rejects negative values
-        # so we test boundary cases only
+        # Positions at or beyond boundary
         invalid_positions = [
             (10, 5),  # x at boundary
             (5, 10),  # y at boundary
@@ -82,9 +78,7 @@ class TestPositionInvariant:
 
         for x, y in invalid_positions:
             pos = Coordinates(x=x, y=y)
-            # Should return False
-            is_valid = enforcer.validate_position(pos, raise_on_invalid=False)
-            assert not is_valid, f"Position ({x}, {y}) should be invalid"
+            assert not grid_size.contains(pos), f"Position ({x}, {y}) should be invalid"
 
 
 class TestStepCountInvariant:
@@ -131,24 +125,14 @@ class TestStepCountInvariant:
 
     def test_agent_state_step_count_consistent(self):
         """AgentState.step_count must match actual steps taken."""
-        from plume_nav_sim.core.state_manager import StateManager, StateManagerConfig
+        from plume_nav_sim.core.types import AgentState
 
-        config = StateManagerConfig(
-            grid_size=GridSize(20, 20),
-            source_location=Coordinates(10, 10),
-            max_steps=50,
-            goal_radius=5.0,
-        )
-        manager = StateManager(config=config)
-        manager.initialize_episode(episode_seed=42)
+        state = AgentState(position=Coordinates(10, 10))
 
         for step in range(10):
-            state = manager.current_agent_state
             # INVARIANT: step_count matches actual steps
             assert state.step_count == step
-
-            # Take action
-            manager.update_agent_state(action=0, step_reward=0.0)
+            state.increment_step()
 
 
 class TestRewardAccumulationInvariant:
@@ -188,26 +172,18 @@ class TestRewardAccumulationInvariant:
 
     def test_agent_state_reward_accumulation(self):
         """AgentState.total_reward must accumulate correctly."""
-        from plume_nav_sim.core.state_manager import StateManager, StateManagerConfig
+        from plume_nav_sim.core.types import AgentState
 
-        config = StateManagerConfig(
-            grid_size=GridSize(20, 20),
-            source_location=Coordinates(10, 10),
-            max_steps=50,
-            goal_radius=5.0,
-        )
-        manager = StateManager(config=config)
-        manager.initialize_episode(episode_seed=42)
+        state = AgentState(position=Coordinates(10, 10))
 
         rewards = [0.1, 0.2, 0.0, 0.5, 1.0]
         expected_total = 0.0
 
         for step_reward in rewards:
-            manager.update_agent_state(action=0, step_reward=step_reward)
+            state.add_reward(step_reward)
             expected_total += step_reward
 
-            state = manager.current_agent_state
-            # INVARIANT: Accumulation is exact
+        # INVARIANT: Accumulation is exact
         assert np.isclose(state.total_reward, expected_total, rtol=1e-9)
 
 
@@ -363,60 +339,57 @@ class TestGoalDetectionConsistency:
 
     def test_goal_signals_consistent_when_reached(self):
         """When goal reached, all signals must agree."""
-        from plume_nav_sim.core.reward_calculator import (
-            RewardCalculator,
-            RewardCalculatorConfig,
+        from plume_nav_sim.core.geometry import calculate_euclidean_distance
+        from plume_nav_sim.core.types import AgentState
+        from plume_nav_sim.rewards.sparse_goal import SparseGoalReward
+
+        goal_radius = 5.0
+        goal_pos = Coordinates(12, 12)
+        reward_fn = SparseGoalReward(goal_position=goal_pos, goal_radius=goal_radius)
+
+        agent_pos = Coordinates(10, 10)  # distance ~ 2.83 < 5.0
+
+        prev_state = AgentState(position=Coordinates(9, 9))
+        next_state = AgentState(position=agent_pos)
+
+        reward = reward_fn.compute_reward(
+            prev_state=prev_state,
+            action=0,
+            next_state=next_state,
+            plume_field=np.zeros((1,)),
         )
 
-        config = RewardCalculatorConfig(
-            goal_radius=5.0,
-            reward_goal_reached=1.0,
-            reward_default=0.0,
-        )
-        calculator = RewardCalculator(config=config)
-
-        # Agent at goal
-        agent_pos = Coordinates(10, 10)
-        goal_pos = Coordinates(12, 12)  # distance ~ 2.83 < 5.0
-
-        result = calculator.calculate_reward(
-            agent_position=agent_pos,
-            source_location=goal_pos,
-            step_count=5,
-        )
-
-        # INVARIANT: All goal signals must align
-        assert result.reward == 1.0, "Reward should be goal_reached value"
-        assert result.goal_reached is True, "goal_reached flag must be True"
-        # Note: terminated is handled by environment, but reward/goal_reached must agree
+        dist = calculate_euclidean_distance(agent_pos, goal_pos)
+        # INVARIANT: reward and distance must agree
+        assert dist <= goal_radius
+        assert reward == 1.0, "Reward should be goal_reached value"
 
     def test_goal_signals_consistent_when_not_reached(self):
         """When goal not reached, signals must agree."""
-        from plume_nav_sim.core.reward_calculator import (
-            RewardCalculator,
-            RewardCalculatorConfig,
+        from plume_nav_sim.core.geometry import calculate_euclidean_distance
+        from plume_nav_sim.core.types import AgentState
+        from plume_nav_sim.rewards.sparse_goal import SparseGoalReward
+
+        goal_radius = 2.0
+        goal_pos = Coordinates(20, 20)
+        reward_fn = SparseGoalReward(goal_position=goal_pos, goal_radius=goal_radius)
+
+        agent_pos = Coordinates(0, 0)  # distance ~ 28.28 > 2.0
+
+        prev_state = AgentState(position=Coordinates(1, 1))
+        next_state = AgentState(position=agent_pos)
+
+        reward = reward_fn.compute_reward(
+            prev_state=prev_state,
+            action=0,
+            next_state=next_state,
+            plume_field=np.zeros((1,)),
         )
 
-        config = RewardCalculatorConfig(
-            goal_radius=2.0,
-            reward_goal_reached=1.0,
-            reward_default=0.0,
-        )
-        calculator = RewardCalculator(config=config)
-
-        # Agent far from goal
-        agent_pos = Coordinates(0, 0)
-        goal_pos = Coordinates(20, 20)  # distance ~ 28.28 > 2.0
-
-        result = calculator.calculate_reward(
-            agent_position=agent_pos,
-            source_location=goal_pos,
-            step_count=5,
-        )
-
+        dist = calculate_euclidean_distance(agent_pos, goal_pos)
         # INVARIANT: All signals must indicate goal NOT reached
-        assert result.reward == 0.0, "Reward should be default"
-        assert result.goal_reached is False, "goal_reached must be False"
+        assert dist > goal_radius
+        assert reward == 0.0, "Reward should be default"
 
 
 class TestTerminationConsistency:
@@ -484,23 +457,16 @@ class TestConfigImmutability:
 
     def test_config_values_dont_change_during_use(self):
         """Config values must remain constant throughout usage."""
-        from plume_nav_sim.core.reward_calculator import RewardCalculatorConfig
-
-        config = RewardCalculatorConfig(
-            goal_radius=5.0,
-            reward_goal_reached=1.0,
-            reward_default=0.0,
-        )
+        config = EnvironmentConfig()
 
         # Record initial values
-        initial_radius = config.goal_radius
-        initial_goal_reward = config.reward_goal_reached
+        initial_max_steps = config.max_steps
+        initial_goal_radius = config.goal_radius
 
-        # Use config in calculations (simulate usage)
+        # Simulate usage
         for _ in range(100):
-            # Config values should not change
-            assert config.goal_radius == initial_radius
-            assert config.reward_goal_reached == initial_goal_reward
+            assert config.max_steps == initial_max_steps
+            assert config.goal_radius == initial_goal_radius
 
 
 class TestComponentIsolation:
@@ -544,31 +510,22 @@ class TestComponentIsolation:
                 obs1_a, obs2_a
             ), "Different seeds should give different obs"
 
-    def test_state_manager_instances_independent(self):
-        """Multiple StateManager instances must not interfere."""
-        from plume_nav_sim.core.state_manager import StateManager, StateManagerConfig
+    def test_agent_state_instances_independent(self):
+        """Multiple AgentState instances must not interfere."""
+        from plume_nav_sim.core.types import AgentState
 
-        config = StateManagerConfig(
-            grid_size=GridSize(20, 20),
-            source_location=Coordinates(10, 10),
-            max_steps=50,
-            goal_radius=5.0,
-        )
+        state1 = AgentState(position=Coordinates(5, 5))
+        state2 = AgentState(position=Coordinates(10, 10))
 
-        manager1 = StateManager(config=config)
-        manager2 = StateManager(config=config)
+        # Update state1
+        state1.increment_step()
+        state1.add_reward(0.5)
 
-        manager1.initialize_episode(episode_seed=1)
-        manager2.initialize_episode(episode_seed=2)
-
-        # Update manager1
-        manager1.update_agent_state(action=0, step_reward=0.5)
-
-        # manager2 should be unaffected
-        assert manager1.current_agent_state.step_count == 1
-        assert manager2.current_agent_state.step_count == 0
-        assert manager1.current_agent_state.total_reward == 0.5
-        assert manager2.current_agent_state.total_reward == 0.0
+        # state2 should be unaffected
+        assert state1.step_count == 1
+        assert state2.step_count == 0
+        assert state1.total_reward == 0.5
+        assert state2.total_reward == 0.0
 
 
 class TestMathematicalConsistency:

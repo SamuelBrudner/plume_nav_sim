@@ -402,7 +402,7 @@ class TestAgentStateMonotonicity:
         Contract: core_types.md - Invariant I5
         step_count' >= step_count
         """
-        from plume_nav_sim.core.state_manager import AgentState
+        from plume_nav_sim.core.types import AgentState
 
         state = AgentState(position=Coordinates(0, 0))
 
@@ -423,7 +423,7 @@ class TestAgentStateMonotonicity:
 
     def test_total_reward_tracks_cumulative_sum(self):
         """Total reward equals the cumulative sum of all rewards, including negatives."""
-        from plume_nav_sim.core.state_manager import AgentState
+        from plume_nav_sim.core.types import AgentState
 
         state = AgentState(position=Coordinates(0, 0))
 
@@ -439,7 +439,7 @@ class TestAgentStateMonotonicity:
 
     def test_negative_reward_allowed(self):
         """Negative rewards are accumulated without validation errors."""
-        from plume_nav_sim.core.state_manager import AgentState
+        from plume_nav_sim.core.types import AgentState
 
         state = AgentState(position=Coordinates(0, 0))
 
@@ -464,7 +464,7 @@ class TestAgentStateIdempotency:
         Contract: core_types.md
         goal_reached is idempotent (once True, stays True).
         """
-        from plume_nav_sim.core.state_manager import AgentState
+        from plume_nav_sim.core.types import AgentState
 
         state = AgentState(position=Coordinates(0, 0))
 
@@ -485,7 +485,7 @@ class TestAgentStateIdempotency:
         Contract: core_types.md
         ¬∃ state: goal_reached = True ∧ goal_reached' = False
         """
-        from plume_nav_sim.core.state_manager import AgentState
+        from plume_nav_sim.core.types import AgentState
 
         state = AgentState(position=Coordinates(0, 0))
         state.mark_goal_reached()
@@ -513,7 +513,7 @@ class TestAgentStateValidation:
 
         Contract: core_types.md - Invariant I2
         """
-        from plume_nav_sim.core.state_manager import AgentState
+        from plume_nav_sim.core.types import AgentState
 
         # Valid
         state = AgentState(position=Coordinates(0, 0), step_count=0)
@@ -529,7 +529,7 @@ class TestAgentStateValidation:
     @pytest.mark.skip(reason="Validation removed in core types simplification")
     def test_initial_total_reward_allows_negative(self):
         """Initial total_reward can be negative for debt-based reward schemes."""
-        from plume_nav_sim.core.state_manager import AgentState
+        from plume_nav_sim.core.types import AgentState
 
         # Valid
         state = AgentState(position=Coordinates(0, 0), total_reward=0.0)

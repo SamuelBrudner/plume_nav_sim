@@ -24,6 +24,13 @@ This directory contains tests that were archived because they test **implementat
 - **Replacement**: None needed - logging behavior verified by integration tests
 - **Coverage**: All 111 core tests use logging; failures would be caught there
 
+### Legacy Core Monolith Suites (archived 2026-02-06)
+- `test_boundary_enforcer_legacy_core.py`
+- `test_reward_calculator_legacy_core.py`
+- `test_episode_manager_legacy_core.py`
+- `test_config_contracts_legacy_core.py`
+- **Reason**: These suites target removed legacy modules (episode_manager, state_manager, reward_calculator, boundary_enforcer, action_processor) replaced by component-based architecture.
+
 ## Philosophy: Test Behavior, Not Implementation
 
 ### ❌ Don't Test

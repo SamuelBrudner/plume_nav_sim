@@ -54,29 +54,16 @@ PERFORMANCE_TARGET_EPISODE_RESET_MS = 10.0
 PERFORMANCE_TARGET_BOUNDARY_ENFORCEMENT_MS = 0.5
 PERFORMANCE_BENCHMARK_ITERATIONS = 100
 
-# Legacy aliases for backward compatibility with boundary_enforcer.py
-BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS = PERFORMANCE_TARGET_BOUNDARY_ENFORCEMENT_MS
-BOUNDARY_VALIDATION_CACHE_SIZE = 1000
-
 LOG_LEVEL_DEFAULT = "INFO"
 COMPONENT_NAMES = [
     "environment",
     "plume_model",
     "rendering",
-    "action_processor",
-    "reward_calculator",
-    "state_manager",
-    "boundary_enforcer",
-    "episode_manager",
     "concentration_field",
-    "utils",
-    "validation",
     "registration",
     "plume",
     "render",
     "envs",
-    "plume_model_registry",
-    "static_gaussian_plume",
 ]
 
 SEED_MIN_VALUE = 0
@@ -248,8 +235,6 @@ __all__ = [
     "AGENT_MARKER_COLOR",
     "AGENT_MARKER_SIZE",
     "BACKEND_PRIORITY_LIST",
-    "BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS",
-    "BOUNDARY_VALIDATION_CACHE_SIZE",
     "COMPONENT_NAMES",
     "CONCENTRATION_RANGE",
     "DEFAULT_GOAL_RADIUS",

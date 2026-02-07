@@ -91,17 +91,10 @@ class TestRemovedFunctionSignatures:
 class TestRemovedParameters:
     """Test that removed parameters are actually gone."""
 
-    def test_validate_functions_no_strict_mode(self):
-        """strict_mode parameter was removed per CONTRACTS.md."""
-        from plume_nav_sim.core.boundary_enforcer import MovementConstraint
-
-        # MovementConstraint.validate_configuration() no longer has strict_mode
-        constraint = MovementConstraint()
-        sig = constraint.validate_configuration.__code__.co_varnames
-
-        assert (
-            "strict_mode" not in sig
-        ), "strict_mode parameter should be removed per CONTRACTS.md"
+    def test_boundary_enforcer_module_removed(self):
+        """boundary_enforcer module was removed (monolith cleanup)."""
+        with pytest.raises(ModuleNotFoundError):
+            import plume_nav_sim.core.boundary_enforcer  # noqa: F401
 
 
 class TestDeprecatedAPIsDocumented:
