@@ -17,6 +17,42 @@ def _coerce_int(value: Any) -> int:
         return 0
 
 
+def _get_package_version() -> Optional[str]:
+    try:
+        from plume_nav_sim import __version__
+
+        return __version__
+    except (ImportError, AttributeError):
+        return None
+
+
+def _build_simulation_metadata(
+    env_config: dict, meta_overrides: Optional[dict] = None
+) -> Optional[dict]:
+    """Auto-generate SimulationMetadata dict from env config for FAIR provenance."""
+    try:
+        import hashlib
+        import json
+        from datetime import datetime, timezone
+
+        config_str = json.dumps(env_config, sort_keys=True, default=str)
+        config_hash = hashlib.sha256(config_str.encode()).hexdigest()[:12]
+
+        seed = None
+        if isinstance(meta_overrides, dict):
+            seed = meta_overrides.get("base_seed")
+
+        return {
+            "software_name": "plume-nav-sim",
+            "software_version": _get_package_version(),
+            "config_hash": config_hash,
+            "random_seed": seed,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception:
+        return None
+
+
 class DataCaptureWrapper(gym.Wrapper):
     def __init__(
         self,
@@ -45,6 +81,7 @@ class DataCaptureWrapper(gym.Wrapper):
             experiment=recorder.experiment,
             start_time=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             env_config=cfg_payload,
+            package_version=_get_package_version(),
         )
         if meta_overrides:
             cfg = meta.to_dict()
@@ -57,6 +94,13 @@ class DataCaptureWrapper(gym.Wrapper):
             if extra:
                 cfg["extra"] = extra
             meta = RunMeta(**cfg)
+
+        sim_meta = _build_simulation_metadata(cfg_payload, meta_overrides)
+        if sim_meta is not None:
+            cfg2 = meta.to_dict()
+            cfg2.setdefault("extra", {})["simulation_metadata"] = sim_meta
+            meta = RunMeta(**cfg2)
+
         self.recorder.write_run_meta(meta)
 
     def reset(self, **kwargs):
