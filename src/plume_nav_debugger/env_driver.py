@@ -36,6 +36,7 @@ class DebuggerConfig:
     movie_h5_dataset: Optional[str] = None
     movie_normalize: Optional[str] = None
     movie_chunks: Optional[str] = None
+    action_names_override: Optional[list[str]] = None
 
     @classmethod
     def from_env(cls) -> "DebuggerConfig":
@@ -789,6 +790,9 @@ class EnvDriver(QtCore.QObject):
         return self._last_event
 
     def get_action_names(self) -> list[str]:
+        override = getattr(self.config, "action_names_override", None)
+        if isinstance(override, list) and override:
+            return override
         # Provider-only: no heuristics or numeric fallbacks
         if self._mux is not None:
             try:

@@ -1431,6 +1431,8 @@ class LiveConfigWidget(QtWidgets.QWidget):
         self.plume_combo.addItems(["static", "movie"])
         self.action_combo = QtWidgets.QComboBox()
         self.action_combo.addItems(["oriented", "discrete", "run_tumble"])
+        self.action_names_edit = QtWidgets.QLineEdit()
+        self.action_names_edit.setPlaceholderText("comma-separated (optional)")
         self.movie_dataset_edit = QtWidgets.QLineEdit()
         self.movie_dataset_edit.setPlaceholderText("registry id (optional)")
         self.movie_path_edit = QtWidgets.QLineEdit()
@@ -1446,6 +1448,7 @@ class LiveConfigWidget(QtWidgets.QWidget):
         form.addRow("Seed", self.seed_edit)
         form.addRow("Plume", self.plume_combo)
         form.addRow("Action type", self.action_combo)
+        form.addRow("Action names", self.action_names_edit)
         form.addRow("Max steps", self.max_steps_spin)
         form.addRow("Movie dataset id", self.movie_dataset_edit)
         form.addRow("Movie path", movie_path_row)
@@ -1468,6 +1471,7 @@ class LiveConfigWidget(QtWidgets.QWidget):
         self.preset_combo.currentTextChanged.connect(self._on_preset_selected)
         self.plume_combo.currentTextChanged.connect(self._on_plume_changed)
         self.action_combo.currentTextChanged.connect(self._on_fields_changed)
+        self.action_names_edit.editingFinished.connect(self._on_fields_changed)
         self.max_steps_spin.valueChanged.connect(self._on_fields_changed)
         self.seed_edit.editingFinished.connect(self._on_fields_changed)
         self.movie_dataset_edit.editingFinished.connect(self._on_fields_changed)
@@ -1548,6 +1552,14 @@ class LiveConfigWidget(QtWidgets.QWidget):
             self.action_combo.setCurrentText(action)
         except Exception:
             self.action_combo.setCurrentText("oriented")
+        try:
+            names = getattr(cfg, "action_names_override", None)
+            if isinstance(names, list):
+                self.action_names_edit.setText(", ".join(str(x) for x in names))
+            else:
+                self.action_names_edit.setText("")
+        except Exception:
+            self.action_names_edit.setText("")
         try:
             self.movie_dataset_edit.setText(
                 "" if cfg.movie_dataset_id is None else str(cfg.movie_dataset_id)
@@ -1639,6 +1651,13 @@ class LiveConfigWidget(QtWidgets.QWidget):
         self._draft.action_type = action
         self._draft.max_steps = int(self.max_steps_spin.value())
         self._draft.seed = seed_val
+        names_txt = self.action_names_edit.text().strip()
+        if names_txt:
+            parsed_names = [part.strip() for part in names_txt.split(",")]
+            parsed_names = [name for name in parsed_names if name]
+            self._draft.action_names_override = parsed_names or None
+        else:
+            self._draft.action_names_override = None
 
         if plume == "movie":
             ds = self.movie_dataset_edit.text().strip()
