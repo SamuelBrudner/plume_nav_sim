@@ -12,7 +12,7 @@ from plume_nav_sim.envs.config_types import EnvironmentConfig
 
 HYDRA_OPTIONAL_DEPENDENCY_MSG = (
     "Hydra/OmegaConf support is optional. Install it with: "
-    "pip install plume-nav-sim[hydra]"
+    "pip install plume-nav-sim[all]"
 )
 
 

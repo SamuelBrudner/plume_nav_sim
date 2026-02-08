@@ -14,9 +14,9 @@ def _try_import_h5py():
         import h5py
 
         return h5py
-    except ImportError as e:  # pragma: no cover - exercised when video extras missing
+    except ImportError as e:  # pragma: no cover - exercised when optional deps missing
         raise ImportError(
-            "h5py is required for HDF5 movie ingest. Install with 'pip install plume-nav-sim[video]'."
+            "h5py is required for HDF5 movie ingest. Install with 'pip install plume-nav-sim[all]'."
         ) from e
 
 
@@ -202,9 +202,9 @@ def _try_import_zarr():
         import zarr as _zarr
 
         return _zarr
-    except Exception as e:  # pragma: no cover - exercised when media extras missing
+    except Exception as e:  # pragma: no cover - exercised when optional deps missing
         raise ImportError(
-            "zarr is required for HDF5 movie ingest. Install with 'pip install zarr numcodecs'."
+            "zarr is required for HDF5 movie ingest. Install with 'pip install plume-nav-sim[all]'."
         ) from e
 
 
