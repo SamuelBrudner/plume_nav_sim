@@ -16,12 +16,43 @@ except Exception as e:  # pragma: no cover - GUI import guard
 from plume_nav_debugger.env_driver import DebuggerConfig
 
 
+class _DatasetDownloadWorker(QtCore.QObject):
+    finished = QtCore.Signal(str)
+    failed = QtCore.Signal(str)
+
+    def __init__(self, *, dataset_id: str, cache_root: Optional[str]) -> None:
+        super().__init__()
+        self._dataset_id = str(dataset_id)
+        self._cache_root = cache_root
+
+    @QtCore.Slot()
+    def run(self) -> None:
+        try:
+            from plume_nav_sim.data_zoo.download import ensure_dataset_available
+
+            cache_root_path = (
+                None
+                if self._cache_root is None or not str(self._cache_root).strip()
+                else Path(str(self._cache_root)).expanduser()
+            )
+            path = ensure_dataset_available(
+                self._dataset_id,
+                cache_root=cache_root_path,
+                auto_download=True,
+            )
+            self.finished.emit(str(path))
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class LiveConfigWidget(QtWidgets.QWidget):
     apply_requested = QtCore.Signal(object)  # DebuggerConfig
 
     def __init__(self, cfg: DebuggerConfig, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
         self._updating = False
+        self._movie_download_thread: QtCore.QThread | None = None
+        self._movie_download_worker: _DatasetDownloadWorker | None = None
         self._applied = DebuggerConfig(**vars(cfg))
         self._draft = DebuggerConfig(**vars(cfg))
         self._presets = self._build_presets()
@@ -49,8 +80,29 @@ class LiveConfigWidget(QtWidgets.QWidget):
         self.action_combo.addItems(["oriented", "discrete", "run_tumble"])
         self.action_names_edit = QtWidgets.QLineEdit()
         self.action_names_edit.setPlaceholderText("comma-separated (optional)")
-        self.movie_dataset_edit = QtWidgets.QLineEdit()
-        self.movie_dataset_edit.setPlaceholderText("registry id (optional)")
+
+        self.movie_dataset_combo = QtWidgets.QComboBox()
+        self.movie_dataset_combo.addItem("<none>", userData=None)
+        self._registry_ids: list[str] = []
+        try:
+            from plume_nav_sim.data_zoo.registry import get_dataset_registry
+
+            self._registry_ids = sorted(get_dataset_registry().keys())
+        except Exception:
+            self._registry_ids = []
+        for ds_id in self._registry_ids:
+            self.movie_dataset_combo.addItem(ds_id, userData=ds_id)
+
+        self.movie_registry_status_label = QtWidgets.QLabel("")
+        self.movie_registry_path_edit = QtWidgets.QLineEdit()
+        self.movie_registry_path_edit.setReadOnly(True)
+        self.movie_registry_path_edit.setPlaceholderText("registry cache path")
+        self.movie_download_btn = QtWidgets.QPushButton("Download")
+        self.movie_download_btn.clicked.connect(self._download_selected_dataset)
+        self.movie_download_progress = QtWidgets.QProgressBar()
+        self.movie_download_progress.setRange(0, 0)  # indeterminate
+        self.movie_download_progress.setVisible(False)
+
         self.movie_path_edit = QtWidgets.QLineEdit()
         self.movie_path_edit.setPlaceholderText("path to zarr/h5/avi (optional)")
         self.movie_browse_btn = QtWidgets.QToolButton()
@@ -75,12 +127,21 @@ class LiveConfigWidget(QtWidgets.QWidget):
         movie_cache_root_layout.addWidget(self.movie_cache_root_edit, 1)
         movie_cache_root_layout.addWidget(self.movie_cache_root_browse_btn, 0)
 
+        movie_registry_status_row = QtWidgets.QWidget()
+        movie_registry_status_layout = QtWidgets.QHBoxLayout(movie_registry_status_row)
+        movie_registry_status_layout.setContentsMargins(0, 0, 0, 0)
+        movie_registry_status_layout.addWidget(self.movie_registry_status_label, 1)
+        movie_registry_status_layout.addWidget(self.movie_download_btn, 0)
+        movie_registry_status_layout.addWidget(self.movie_download_progress, 0)
+
         form.addRow("Seed", self.seed_edit)
         form.addRow("Plume", self.plume_combo)
         form.addRow("Action type", self.action_combo)
         form.addRow("Action names", self.action_names_edit)
         form.addRow("Max steps", self.max_steps_spin)
-        form.addRow("Movie dataset id", self.movie_dataset_edit)
+        form.addRow("Movie dataset (registry)", self.movie_dataset_combo)
+        form.addRow("Movie dataset status", movie_registry_status_row)
+        form.addRow("Movie dataset path", self.movie_registry_path_edit)
         form.addRow("Movie path", movie_path_row)
         form.addRow("Movie auto-download", self.movie_auto_download_check)
         form.addRow("Movie cache root", movie_cache_root_row)
@@ -106,7 +167,7 @@ class LiveConfigWidget(QtWidgets.QWidget):
         self.action_names_edit.editingFinished.connect(self._on_fields_changed)
         self.max_steps_spin.valueChanged.connect(self._on_fields_changed)
         self.seed_edit.editingFinished.connect(self._on_fields_changed)
-        self.movie_dataset_edit.editingFinished.connect(self._on_fields_changed)
+        self.movie_dataset_combo.currentIndexChanged.connect(self._on_fields_changed)
         self.movie_path_edit.editingFinished.connect(self._on_fields_changed)
         self.movie_auto_download_check.stateChanged.connect(
             lambda _v=None: self._on_fields_changed()
@@ -199,11 +260,11 @@ class LiveConfigWidget(QtWidgets.QWidget):
         except Exception:
             self.action_names_edit.setText("")
         try:
-            self.movie_dataset_edit.setText(
-                "" if cfg.movie_dataset_id is None else str(cfg.movie_dataset_id)
+            self._set_selected_dataset_id(
+                None if cfg.movie_dataset_id is None else str(cfg.movie_dataset_id)
             )
         except Exception:
-            self.movie_dataset_edit.setText("")
+            self._set_selected_dataset_id(None)
         try:
             self.movie_path_edit.setText(
                 "" if cfg.movie_path is None else str(cfg.movie_path)
@@ -222,12 +283,16 @@ class LiveConfigWidget(QtWidgets.QWidget):
             self.movie_cache_root_edit.setText("")
 
         self._sync_movie_enabled()
+        self._update_movie_registry_status()
         self._updating = False
 
     def _sync_movie_enabled(self) -> None:
         is_movie = str(self.plume_combo.currentText()).strip().lower() == "movie"
-        has_dataset_id = bool(self.movie_dataset_edit.text().strip())
-        self.movie_dataset_edit.setEnabled(is_movie)
+        has_dataset_id = bool(self._get_selected_dataset_id())
+        self.movie_dataset_combo.setEnabled(is_movie)
+        self.movie_registry_status_label.setEnabled(is_movie)
+        self.movie_registry_path_edit.setEnabled(is_movie)
+        self.movie_download_btn.setEnabled(is_movie and has_dataset_id)
         self.movie_path_edit.setEnabled(is_movie)
         self.movie_browse_btn.setEnabled(is_movie)
         self.movie_auto_download_check.setEnabled(is_movie and has_dataset_id)
@@ -261,6 +326,7 @@ class LiveConfigWidget(QtWidgets.QWidget):
             return
         self._apply_fields_to_draft()
         self._sync_movie_enabled()
+        self._update_movie_registry_status()
         self._update_preview()
 
     @QtCore.Slot(str)
@@ -279,12 +345,13 @@ class LiveConfigWidget(QtWidgets.QWidget):
             self._draft.movie_cache_root = None
             self._updating = True
             try:
-                self.movie_dataset_edit.setText("")
+                self._set_selected_dataset_id(None)
                 self.movie_path_edit.setText("")
                 self.movie_auto_download_check.setChecked(False)
                 self.movie_cache_root_edit.setText("")
             finally:
                 self._updating = False
+            self._update_movie_registry_status()
         self._update_preview()
 
     def _apply_fields_to_draft(self) -> None:
@@ -317,8 +384,7 @@ class LiveConfigWidget(QtWidgets.QWidget):
             self._draft.action_names_override = None
 
         if plume == "movie":
-            ds = self.movie_dataset_edit.text().strip()
-            self._draft.movie_dataset_id = ds if ds else None
+            self._draft.movie_dataset_id = self._get_selected_dataset_id()
             mp = self.movie_path_edit.text().strip()
             self._draft.movie_path = mp if mp else None
             self._draft.movie_auto_download = bool(
@@ -392,3 +458,133 @@ class LiveConfigWidget(QtWidgets.QWidget):
         except Exception:
             self.preview.setPlainText("")
 
+    def _get_selected_dataset_id(self) -> Optional[str]:
+        try:
+            ds = self.movie_dataset_combo.currentData()
+            if isinstance(ds, str):
+                ds = ds.strip()
+                return ds or None
+        except Exception:
+            pass
+        try:
+            txt = str(self.movie_dataset_combo.currentText()).strip()
+            if txt == "<none>":
+                return None
+            return txt or None
+        except Exception:
+            return None
+
+    def _set_selected_dataset_id(self, dataset_id: Optional[str]) -> None:
+        ds = None if dataset_id is None else str(dataset_id).strip()
+        prev_updating = self._updating
+        self._updating = True
+        try:
+            if not ds:
+                self.movie_dataset_combo.setCurrentIndex(0)
+                return
+            idx = self.movie_dataset_combo.findData(ds)
+            if idx < 0:
+                # Preserve unknown ids by adding them to the picker (still editable via config).
+                self.movie_dataset_combo.addItem(f"{ds}", userData=ds)
+                idx = self.movie_dataset_combo.findData(ds)
+            if idx >= 0:
+                self.movie_dataset_combo.setCurrentIndex(idx)
+        finally:
+            self._updating = prev_updating
+
+    def _resolve_registry_expected_path(self, dataset_id: str) -> Optional[Path]:
+        try:
+            from plume_nav_sim.data_zoo.registry import DEFAULT_CACHE_ROOT, describe_dataset
+        except Exception:
+            return None
+
+        try:
+            entry = describe_dataset(dataset_id)
+        except Exception:
+            return None
+
+        cache_root_txt = self.movie_cache_root_edit.text().strip()
+        cache_root = (
+            DEFAULT_CACHE_ROOT
+            if not cache_root_txt
+            else Path(cache_root_txt).expanduser()
+        )
+        cache_dir = entry.cache_path(cache_root)
+        return cache_dir / entry.expected_root
+
+    def _update_movie_registry_status(self) -> None:
+        is_movie = str(self.plume_combo.currentText()).strip().lower() == "movie"
+        ds = self._get_selected_dataset_id()
+        if not is_movie or not ds:
+            self.movie_registry_status_label.setText("")
+            self.movie_registry_path_edit.setText("")
+            self.movie_download_btn.setEnabled(False)
+            return
+
+        expected = self._resolve_registry_expected_path(ds)
+        if expected is None:
+            self.movie_registry_status_label.setText("Registry unavailable or unknown dataset id")
+            self.movie_registry_path_edit.setText("")
+            self.movie_download_btn.setEnabled(False)
+            return
+
+        self.movie_registry_path_edit.setText(str(expected))
+        cached = expected.exists()
+        self.movie_registry_status_label.setText("Cached" if cached else "Not cached")
+        self.movie_download_btn.setEnabled(not cached)
+
+    @QtCore.Slot()
+    def _download_selected_dataset(self) -> None:
+        ds = self._get_selected_dataset_id()
+        if not ds:
+            return
+
+        if (
+            self._movie_download_thread is not None
+            and self._movie_download_thread.isRunning()
+        ):
+            return  # One download at a time
+
+        self.movie_download_btn.setEnabled(False)
+        self.movie_download_progress.setVisible(True)
+        self.movie_registry_status_label.setText("Downloading...")
+
+        cache_root_txt = self.movie_cache_root_edit.text().strip() or None
+        worker = _DatasetDownloadWorker(dataset_id=ds, cache_root=cache_root_txt)
+        thread = QtCore.QThread(self)
+        worker.moveToThread(thread)
+        self._movie_download_thread = thread
+        self._movie_download_worker = worker
+
+        def _cleanup() -> None:
+            thread.quit()
+            worker.deleteLater()
+            thread.deleteLater()
+            self._movie_download_thread = None
+            self._movie_download_worker = None
+
+        def _on_ok(_path: str) -> None:
+            self.movie_download_progress.setVisible(False)
+            self._update_movie_registry_status()
+            _cleanup()
+
+        def _on_err(message: str) -> None:
+            self.movie_download_progress.setVisible(False)
+            self._update_movie_registry_status()
+            try:
+                box = QtWidgets.QMessageBox(self)
+                box.setIcon(QtWidgets.QMessageBox.Critical)
+                box.setWindowTitle("Dataset download failed")
+                box.setText(str(message))
+                box.setInformativeText(
+                    "Try a local movie path, or choose a different registry dataset."
+                )
+                box.open()
+            except Exception:
+                pass
+            _cleanup()
+
+        thread.started.connect(worker.run)
+        worker.finished.connect(_on_ok)
+        worker.failed.connect(_on_err)
+        thread.start()

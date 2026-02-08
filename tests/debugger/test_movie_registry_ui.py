@@ -23,6 +23,36 @@ def qapp() -> QtWidgets.QApplication:
     return app
 
 
+def test_live_config_registry_cache_status_and_download_button(
+    tmp_path,
+    qapp: QtWidgets.QApplication,  # noqa: ARG001
+) -> None:
+    from plume_nav_sim.data_zoo.registry import describe_dataset
+
+    cfg = DebuggerConfig(plume="movie")
+    w = LiveConfigWidget(cfg)
+    w.plume_combo.setCurrentText("movie")
+    w.movie_cache_root_edit.setText(str(tmp_path))
+    w.movie_dataset_combo.setCurrentText("colorado_jet_v1")
+    w._on_fields_changed()
+
+    assert w.movie_registry_path_edit.text()
+    assert w.movie_registry_status_label.text() in {"Cached", "Not cached"}
+
+    # Missing dataset enables download.
+    assert w.movie_download_btn.isEnabled()
+    assert w.movie_registry_status_label.text() == "Not cached"
+
+    # Create the expected cached root and verify the widget updates.
+    entry = describe_dataset("colorado_jet_v1")
+    expected = entry.cache_path(tmp_path) / entry.expected_root
+    expected.mkdir(parents=True, exist_ok=True)
+    w._update_movie_registry_status()
+
+    assert w.movie_registry_status_label.text() == "Cached"
+    assert not w.movie_download_btn.isEnabled()
+
+
 def test_live_config_enables_registry_controls_only_with_dataset_id(
     qapp: QtWidgets.QApplication,  # noqa: ARG001
 ) -> None:
@@ -35,7 +65,7 @@ def test_live_config_enables_registry_controls_only_with_dataset_id(
     assert not w.movie_auto_download_check.isEnabled()
     assert not w.movie_cache_root_edit.isEnabled()
 
-    w.movie_dataset_edit.setText("colorado_jet_v1")
+    w.movie_dataset_combo.setCurrentText("colorado_jet_v1")
     w._on_fields_changed()
 
     assert w.movie_auto_download_check.isEnabled()
@@ -48,7 +78,7 @@ def test_live_config_apply_emits_movie_registry_fields(
     cfg = DebuggerConfig(plume="movie")
     w = LiveConfigWidget(cfg)
     w.plume_combo.setCurrentText("movie")
-    w.movie_dataset_edit.setText("colorado_jet_v1")
+    w.movie_dataset_combo.setCurrentText("colorado_jet_v1")
     w._on_fields_changed()
 
     w.movie_auto_download_check.setChecked(True)
@@ -108,4 +138,3 @@ def test_replay_driver_resolves_env_kwargs_from_run_meta_extra(
     assert kwargs["movie_dataset_id"] == "colorado_jet_v1"
     assert kwargs["movie_auto_download"] is False
     assert kwargs["movie_cache_root"] == "/tmp/cache"
-
