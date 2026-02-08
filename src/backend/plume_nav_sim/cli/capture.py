@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
@@ -230,6 +232,72 @@ def _stable_cfg_hash(cfg_resolved: dict) -> str:
     return sha256(cfg_bytes).hexdigest()
 
 
+@dataclass(frozen=True)
+class _HydraRunConfig:
+    """Container for resolved run configuration values."""
+
+    values: dict[str, Any]
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, Any]) -> "_HydraRunConfig":
+        return cls(values=dict(values))
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self.values)
+
+
+def _locate_hydra_config_path(config_path: Optional[str]) -> Path:
+    """Resolve and normalize Hydra config root."""
+    return Path(_resolve_config_dir(config_path))
+
+
+def _build_hydra_overrides(overrides: Optional[List[str]]) -> list[str]:
+    """Normalize CLI override arguments into a detached list."""
+    return list(overrides or [])
+
+
+def _compose_hydra_with_runtime(
+    *,
+    config_name: str,
+    config_root: Path,
+    overrides: list[str],
+) -> Any:
+    compose, initialize_config_dir = _require_hydra_runtime()
+    MissingConfigException = _require_hydra_missing_config_exception()
+
+    with initialize_config_dir(version_base=None, config_dir=str(config_root)):
+        try:
+            return compose(config_name=config_name, overrides=overrides)
+        except MissingConfigException:
+            # Fallback: manually compose known data_capture config against
+            # repo conf/. This preserves CLI overrides and enables
+            # tests/CI to run regardless of relative-default quirks in
+            # nested config directories.
+            return _manual_compose_for_data_capture(
+                config_name=config_name,
+                conf_root=config_root,
+                overrides=overrides,
+            )
+
+
+def _map_hydra_cfg_to_run_config(
+    cfg: Any,
+    *,
+    cfg_is_mapping: bool = False,
+) -> dict[str, Any]:
+    """Map Hydra DictConfig or mapping data to a plain run-config dictionary."""
+    if cfg_is_mapping:
+        resolved = cfg
+    else:
+        OmegaConf = _require_omegaconf()
+        resolved = OmegaConf.to_container(cfg, resolve=True)  # type: ignore[arg-type]
+
+    if not isinstance(resolved, Mapping):
+        raise SystemExit("Hydra config must resolve to a mapping at the root")
+
+    return _HydraRunConfig.from_mapping(resolved).to_dict()
+
+
 def _load_hydra_config(
     *,
     config_name: str,
@@ -237,37 +305,29 @@ def _load_hydra_config(
     overrides: List[str],
 ) -> Tuple[dict, str]:
     """Load and resolve Hydra config, returning (as_dict, config_hash)."""
-    config_dir = _resolve_config_dir(config_path)
+    config_root = _locate_hydra_config_path(config_path)
+    hydra_overrides = _build_hydra_overrides(overrides)
     # For the data_capture pipeline, always normalize via the same manual
     # composition helper used as a fallback. This keeps the CLI and tests
     # aligned even when Hydra's packaging semantics (`@package _global_`,
     # nested groups) would otherwise produce a different structure.
     if config_name == "data_capture/config":
-        cfg_resolved = _manual_compose_for_data_capture(
+        cfg_raw = _manual_compose_for_data_capture(
             config_name=config_name,
-            conf_root=Path(config_dir),
-            overrides=overrides or [],
+            conf_root=config_root,
+            overrides=hydra_overrides,
         )
     else:
-        compose, initialize_config_dir = _require_hydra_runtime()
-        MissingConfigException = _require_hydra_missing_config_exception()
-        OmegaConf = _require_omegaconf()
+        cfg_raw = _compose_hydra_with_runtime(
+            config_name=config_name,
+            config_root=config_root,
+            overrides=hydra_overrides,
+        )
 
-        with initialize_config_dir(version_base=None, config_dir=config_dir):
-            try:
-                cfg = compose(config_name=config_name, overrides=overrides or [])
-                cfg_resolved = OmegaConf.to_container(cfg, resolve=True)  # type: ignore[arg-type]
-            except MissingConfigException:
-                # Fallback: manually compose known data_capture config against
-                # repo conf/. This preserves CLI overrides and enables
-                # tests/CI to run regardless of relative-default quirks in
-                # nested config directories.
-                cfg_resolved = _manual_compose_for_data_capture(
-                    config_name=config_name,
-                    conf_root=Path(config_dir),
-                    overrides=overrides or [],
-                )
-
+    cfg_resolved = _map_hydra_cfg_to_run_config(
+        cfg_raw,
+        cfg_is_mapping=isinstance(cfg_raw, dict),
+    )
     cfg_hash = _stable_cfg_hash(cfg_resolved)
     return cfg_resolved, cfg_hash
 
