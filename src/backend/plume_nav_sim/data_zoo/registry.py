@@ -368,6 +368,7 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
                 ),
                 Creator(
                     name="McHugh, Matthew K.",
+                    orcid="https://orcid.org/0000-0002-1263-0697",
                     affiliation="University of Colorado Boulder",
                 ),
                 Creator(
@@ -436,6 +437,7 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
             creators=(
                 Creator(
                     name="Rigolli, Nicola",
+                    orcid="https://orcid.org/0000-0002-0734-2105",
                     affiliation="University of Genoa",
                 ),
                 Creator(
@@ -505,6 +507,7 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
             creators=(
                 Creator(
                     name="Rigolli, Nicola",
+                    orcid="https://orcid.org/0000-0002-0734-2105",
                     affiliation="University of Genoa",
                 ),
                 Creator(
@@ -574,6 +577,7 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
             creators=(
                 Creator(
                     name="Demir, Mahmut",
+                    orcid="https://orcid.org/0000-0002-3278-7843",
                     affiliation="Yale University",
                 ),
                 Creator(
@@ -663,6 +667,7 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
             creators=(
                 Creator(
                     name="Demir, Mahmut",
+                    orcid="https://orcid.org/0000-0002-3278-7843",
                     affiliation="Yale University",
                 ),
                 Creator(
