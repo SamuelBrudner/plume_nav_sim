@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 try:
     from PySide6 import QtCore
@@ -126,7 +129,7 @@ class _ActionReplayPolicy:
         try:
             self._base.reset(seed=seed)  # type: ignore[attr-defined]
         except Exception:
-            pass
+            logger.debug("Base policy reset failed in replay policy", exc_info=True)
 
     def select_action(  # type: ignore[override]
         self, observation: Any, *, explore: bool = False
@@ -145,7 +148,7 @@ class _ActionReplayPolicy:
                 elif callable(self._base):
                     self._base(observation)
             except Exception:
-                pass
+                logger.debug("Base policy shadow-call failed during replay", exc_info=True)
             return action
 
         if hasattr(self._base, "select_action"):
@@ -258,17 +261,14 @@ class EnvDriver(QtCore.QObject):
 
                 self._env = OverlayInfoWrapper(self._env)
             except Exception:
-                # Best-effort: overlays should never break core stepping/rendering
-                pass
+                logger.debug("Overlay wrapper unavailable; continuing without overlays", exc_info=True)
         except Exception as exc:
             self._env = None
             self._policy = None
             self._controller = None
             self._iter = None
-            try:
-                self.error_occurred.emit(f"Env init failed: {exc}")
-            except Exception:
-                pass
+            logger.error("Environment initialization failed: %s", exc, exc_info=True)
+            self.error_occurred.emit(f"Env init failed: {exc}")
             return
 
         # Choose a policy if available; otherwise fallback to sampler
@@ -280,8 +280,9 @@ class EnvDriver(QtCore.QObject):
                 try:
                     self._policy.reset(seed=self.config.seed)
                 except Exception:
-                    pass
+                    logger.debug("Policy does not support seeded reset", exc_info=True)
             except Exception:
+                logger.info("TemporalDerivativePolicy unavailable; using random sampler")
                 self._policy = self._make_default_policy()
         else:
             self._policy = self._make_default_policy()
@@ -298,11 +299,12 @@ class EnvDriver(QtCore.QObject):
             try:
                 self._controller.reset(seed=self._episode_seed)  # type: ignore[attr-defined]
             except Exception:
-                pass
+                logger.debug("Controller reset failed (non-fatal)", exc_info=True)
             _obs0, _info0 = self._env.reset(seed=self._episode_seed)
             self._update_start_from_info(self._episode_seed or -1, _info0)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("Environment reset failed during init: %s", exc, exc_info=True)
+            self.error_occurred.emit(f"Env reset failed: {exc}")
 
         # Emit an initial frame (pre-step) for immediate visual feedback
         self._emit_frame_now()
@@ -321,31 +323,27 @@ class EnvDriver(QtCore.QObject):
             self._mux = ProviderMux(self._env, self._policy)
             self.provider_mux_changed.emit(self._mux)
             # Structured one-time warning if no provider detected
-            try:
-                import warnings as _warnings
-
-                if not getattr(self, "_warned_no_provider", False):
-                    if hasattr(self._mux, "has_provider") and not self._mux.has_provider():  # type: ignore[attr-defined]
-                        _warnings.warn(
-                            "plume_nav_debugger:no_provider_detected provider is required for action labels, distributions, and pipeline",
-                            RuntimeWarning,
-                        )
-                        self._warned_no_provider = True
-            except Exception:
-                pass
-        except Exception:
+            if not getattr(self, "_warned_no_provider", False):
+                if hasattr(self._mux, "has_provider") and not self._mux.has_provider():  # type: ignore[attr-defined]
+                    logger.warning(
+                        "No DebuggerProvider detected; inspector will show limited information. "
+                        "Implement an ODC provider for action labels, distributions, and pipeline."
+                    )
+                    self._warned_no_provider = True
+        except Exception as exc:
+            logger.warning("ProviderMux creation failed: %s", exc, exc_info=True)
             self._mux = None
         self._emit_action_space_changed()
         try:
             self.policy_changed.emit(self._policy)
         except Exception:
-            pass
+            logger.debug("policy_changed signal emit failed", exc_info=True)
         # Observation pipeline (informational for inspector)
         try:
             # Notify inspector once with the wrapper chain
             self._notify_pipeline()
         except Exception:
-            pass
+            logger.debug("Pipeline notification failed", exc_info=True)
 
     def start(self, interval_ms: int = 50) -> None:
         if self._env is None:
@@ -364,12 +362,12 @@ class EnvDriver(QtCore.QObject):
         try:
             self.pause()
         except Exception:
-            pass
+            logger.debug("Pause during close failed", exc_info=True)
         try:
             if self._env is not None and hasattr(self._env, "close"):
                 self._env.close()
         except Exception:
-            pass
+            logger.debug("Env close failed", exc_info=True)
         self._env = None
         self._iter = None
         self._policy = None
@@ -456,7 +454,8 @@ class EnvDriver(QtCore.QObject):
                 from .controllable_policy import ControllablePolicy
 
                 self._controller = ControllablePolicy(self._policy)
-            except Exception:
+            except Exception as exc:
+                logger.warning("ControllablePolicy creation failed: %s", exc)
                 self._controller = None
         self._apply_explore_override()
 
@@ -468,11 +467,12 @@ class EnvDriver(QtCore.QObject):
                 elif self._policy is not None and hasattr(self._policy, "reset"):
                     self._policy.reset(seed=eff_seed)  # type: ignore[attr-defined]
             except Exception:
-                pass
+                logger.debug("Controller/policy reset failed (non-fatal)", exc_info=True)
             _obs0, _info0 = self._env.reset(seed=eff_seed)
             self._update_start_from_info(eff_seed or -1, _info0)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("Environment reset failed: %s", exc, exc_info=True)
+            self.error_occurred.emit(f"Reset failed: {exc}")
 
         # Show first frame after reset
         self._emit_frame_now()
@@ -608,13 +608,14 @@ class EnvDriver(QtCore.QObject):
 
             self._mux = ProviderMux(self._env, self._policy)
             self.provider_mux_changed.emit(self._mux)
-        except Exception:
+        except Exception as exc:
+            logger.warning("ProviderMux creation failed after policy swap: %s", exc, exc_info=True)
             self._mux = None
         self._emit_action_space_changed()
         try:
             self.policy_changed.emit(self._policy)
         except Exception:
-            pass
+            logger.debug("policy_changed emit failed", exc_info=True)
 
     # --- Environment (re)creation with start override -------------------
     def apply_start_override(self, x: int, y: int, enabled: bool) -> None:
@@ -636,7 +637,7 @@ class EnvDriver(QtCore.QObject):
             if self._env is not None and hasattr(self._env, "close"):
                 self._env.close()
         except Exception:
-            pass
+            logger.debug("Old env close failed during recreation", exc_info=True)
 
         # Build new env with same config, injecting start_location when provided
         action_type = str(getattr(self.config, "action_type", "oriented") or "oriented")
@@ -692,14 +693,12 @@ class EnvDriver(QtCore.QObject):
 
                 self._env = OverlayInfoWrapper(self._env)
             except Exception:
-                pass
+                logger.debug("Overlay wrapper unavailable during recreation", exc_info=True)
         except Exception as exc:
             self._env = None
             self._iter = None
-            try:
-                self.error_occurred.emit(f"Env recreation failed: {exc}")
-            except Exception:
-                pass
+            logger.error("Environment recreation failed: %s", exc, exc_info=True)
+            self.error_occurred.emit(f"Env recreation failed: {exc}")
             return
 
         self._clear_history()
@@ -708,7 +707,8 @@ class EnvDriver(QtCore.QObject):
                 from .controllable_policy import ControllablePolicy
 
                 self._controller = ControllablePolicy(self._policy)
-            except Exception:
+            except Exception as exc:
+                logger.warning("ControllablePolicy creation failed: %s", exc)
                 self._controller = None
         self._apply_explore_override()
         # Reset controller/base policy deterministically and env
@@ -722,11 +722,12 @@ class EnvDriver(QtCore.QObject):
                 elif self._policy is not None and hasattr(self._policy, "reset"):
                     self._policy.reset(seed=eff_seed)  # type: ignore[attr-defined]
             except Exception:
-                pass
+                logger.debug("Controller/policy reset failed during recreation", exc_info=True)
             _obs0, _info0 = self._env.reset(seed=eff_seed)
             self._update_start_from_info(eff_seed or -1, _info0)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("Environment reset failed during recreation: %s", exc, exc_info=True)
+            self.error_occurred.emit(f"Reset failed after env recreation: {exc}")
 
         # Emit first frame and rebuild stream
         self._emit_frame_now()
@@ -746,7 +747,8 @@ class EnvDriver(QtCore.QObject):
 
             self._mux = ProviderMux(self._env, self._policy)
             self.provider_mux_changed.emit(self._mux)
-        except Exception:
+        except Exception as exc:
+            logger.warning("ProviderMux creation failed during recreation: %s", exc, exc_info=True)
             self._mux = None
         self._emit_action_space_changed()
 
@@ -757,7 +759,7 @@ class EnvDriver(QtCore.QObject):
             ):
                 self._controller.set_next_action(int(action), sticky=sticky)  # type: ignore[attr-defined]
         except Exception:
-            pass
+            logger.debug("set_manual_action failed", exc_info=True)
 
     def clear_sticky_action(self) -> None:
         try:
@@ -766,7 +768,7 @@ class EnvDriver(QtCore.QObject):
             ):
                 self._controller.clear_sticky()  # type: ignore[attr-defined]
         except Exception:
-            pass
+            logger.debug("clear_sticky_action failed", exc_info=True)
 
     def set_policy_explore(self, enabled: Optional[bool]) -> None:
         self._policy_explore = None if enabled is None else bool(enabled)
@@ -781,7 +783,7 @@ class EnvDriver(QtCore.QObject):
                     self._policy_explore
                 )
         except Exception:
-            pass
+            logger.debug("Explore override failed", exc_info=True)
 
     def last_event(self):
         return self._last_event
@@ -792,6 +794,7 @@ class EnvDriver(QtCore.QObject):
             try:
                 return self._mux.get_action_names()
             except Exception:
+                logger.debug("get_action_names via mux failed", exc_info=True)
                 return []
         return []
 
@@ -800,7 +803,7 @@ class EnvDriver(QtCore.QObject):
             names = self.get_action_names()
             self.action_space_changed.emit(names)
         except Exception:
-            pass
+            logger.debug("action_space_changed emit failed", exc_info=True)
 
     def _notify_pipeline(self) -> None:
         # Deprecated; pipeline is provided via ProviderMux and Inspector introspection
@@ -819,7 +822,7 @@ class EnvDriver(QtCore.QObject):
                 self._last_start_xy = (x, y)
                 self.run_meta_changed.emit(int(seed_val), (x, y))
         except Exception:
-            pass
+            logger.debug("Failed to extract start info from reset", exc_info=True)
 
     def _emit_frame_now(self) -> None:
         try:
@@ -840,7 +843,7 @@ class EnvDriver(QtCore.QObject):
             if isinstance(frame, np.ndarray):
                 self.frame_ready.emit(frame)
         except Exception:
-            pass
+            logger.debug("Frame emission failed", exc_info=True)
 
     @QtCore.Slot()
     def _on_tick(self) -> None:

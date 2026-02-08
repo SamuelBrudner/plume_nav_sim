@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 try:
     from PySide6 import QtCore, QtGui, QtWidgets
@@ -712,7 +715,7 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             self.action_toggle_overlays.setChecked(bool(self.prefs.show_overlays))
         except Exception:
-            pass
+            logger.debug("Failed to restore overlay preference", exc_info=True)
         # Enforce strict provider-only mode via Inspector (always on; not configurable)
         self.live_driver = EnvDriver(cfg)
         self.replay_driver = ReplayDriver()
@@ -737,7 +740,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 bool(self.controls.explore_check.isChecked())
             )
         except Exception:
-            pass
+            logger.debug("Failed to set initial explore state", exc_info=True)
 
         # Status bar showing step/total reward/flags and run meta
         self._status = QtWidgets.QLabel("ready")
@@ -807,110 +810,52 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
 
     def _connect_driver(self, driver: object) -> None:
-        try:
-            driver.frame_ready.connect(self.frame_view.update_frame)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.step_done.connect(self._on_step_event)  # type: ignore[attr-defined]
-            driver.step_done.connect(self.inspector.on_step_event)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.step_done.connect(self.frame_view.on_step_event)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.episode_finished.connect(self._on_episode_finished)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.action_space_changed.connect(self.inspector.on_action_names)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.action_space_changed.connect(self.frame_view.on_action_names)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.policy_changed.connect(self.inspector.on_policy_changed)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.provider_mux_changed.connect(self.inspector.on_mux_changed)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.run_meta_changed.connect(self._on_run_meta)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.run_meta_changed.connect(self.frame_view.on_run_meta)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        if hasattr(driver, "error_occurred"):
-            try:
-                driver.error_occurred.connect(self._on_driver_error)  # type: ignore[attr-defined]
-            except Exception:
-                pass
-        if hasattr(driver, "timeline_changed"):
-            try:
-                driver.timeline_changed.connect(self._on_timeline_changed)  # type: ignore[attr-defined]
-            except Exception:
-                pass
+        _signal_pairs = [
+            ("frame_ready", self.frame_view.update_frame),
+            ("step_done", self._on_step_event),
+            ("step_done", self.inspector.on_step_event),
+            ("step_done", self.frame_view.on_step_event),
+            ("episode_finished", self._on_episode_finished),
+            ("action_space_changed", self.inspector.on_action_names),
+            ("action_space_changed", self.frame_view.on_action_names),
+            ("policy_changed", self.inspector.on_policy_changed),
+            ("provider_mux_changed", self.inspector.on_mux_changed),
+            ("run_meta_changed", self._on_run_meta),
+            ("run_meta_changed", self.frame_view.on_run_meta),
+            ("error_occurred", self._on_driver_error),
+            ("timeline_changed", self._on_timeline_changed),
+        ]
+        for signal_name, slot in _signal_pairs:
+            sig = getattr(driver, signal_name, None)
+            if sig is not None:
+                try:
+                    sig.connect(slot)
+                except Exception:
+                    logger.debug("Failed to connect %s on driver", signal_name, exc_info=True)
 
     def _disconnect_driver(self, driver: object) -> None:
-        try:
-            driver.frame_ready.disconnect(self.frame_view.update_frame)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.step_done.disconnect(self._on_step_event)  # type: ignore[attr-defined]
-            driver.step_done.disconnect(self.inspector.on_step_event)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.step_done.disconnect(self.frame_view.on_step_event)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.episode_finished.disconnect(self._on_episode_finished)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.action_space_changed.disconnect(self.inspector.on_action_names)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.action_space_changed.disconnect(self.frame_view.on_action_names)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.policy_changed.disconnect(self.inspector.on_policy_changed)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.provider_mux_changed.disconnect(self.inspector.on_mux_changed)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.run_meta_changed.disconnect(self._on_run_meta)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            driver.run_meta_changed.disconnect(self.frame_view.on_run_meta)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        if hasattr(driver, "error_occurred"):
-            try:
-                driver.error_occurred.disconnect(self._on_driver_error)  # type: ignore[attr-defined]
-            except Exception:
-                pass
-        if hasattr(driver, "timeline_changed"):
-            try:
-                driver.timeline_changed.disconnect(self._on_timeline_changed)  # type: ignore[attr-defined]
-            except Exception:
-                pass
+        _signal_pairs = [
+            ("frame_ready", self.frame_view.update_frame),
+            ("step_done", self._on_step_event),
+            ("step_done", self.inspector.on_step_event),
+            ("step_done", self.frame_view.on_step_event),
+            ("episode_finished", self._on_episode_finished),
+            ("action_space_changed", self.inspector.on_action_names),
+            ("action_space_changed", self.frame_view.on_action_names),
+            ("policy_changed", self.inspector.on_policy_changed),
+            ("provider_mux_changed", self.inspector.on_mux_changed),
+            ("run_meta_changed", self._on_run_meta),
+            ("run_meta_changed", self.frame_view.on_run_meta),
+            ("error_occurred", self._on_driver_error),
+            ("timeline_changed", self._on_timeline_changed),
+        ]
+        for signal_name, slot in _signal_pairs:
+            sig = getattr(driver, signal_name, None)
+            if sig is not None:
+                try:
+                    sig.disconnect(slot)
+                except (TypeError, RuntimeError):
+                    pass  # Not connected — expected for optional signals
 
     def _switch_driver(self, driver: object) -> None:
         if driver is self._active_driver:
@@ -920,7 +865,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 if hasattr(self._active_driver, "pause"):
                     self._active_driver.pause()  # type: ignore[attr-defined]
             except Exception:
-                pass
+                logger.debug("Pause during driver switch failed", exc_info=True)
             self._disconnect_driver(self._active_driver)
         self._active_driver = driver
         self._connect_driver(driver)
@@ -932,7 +877,7 @@ class MainWindow(QtWidgets.QMainWindow):
             try:
                 self.inspector.on_action_names(self.live_driver.get_action_names())
             except Exception:
-                pass
+                logger.debug("Action names update failed during driver switch", exc_info=True)
         else:
             try:
                 if self.replay_driver.is_loaded():
@@ -940,7 +885,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     label = run_dir.name if isinstance(run_dir, Path) else "loaded run"
                     self.controls.set_replay_label(label)
             except Exception:
-                pass
+                logger.debug("Replay label update failed", exc_info=True)
         self._refresh_timeline_controls()
 
     # UI wiring --------------------------------------------------------------
@@ -964,7 +909,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 if self._active_driver.is_running():  # type: ignore[attr-defined]
                     self._active_driver.start(int(value))  # type: ignore[attr-defined]
             except Exception:
-                pass
+                logger.debug("Interval change failed", exc_info=True)
 
     @QtCore.Slot()
     def _on_pause_clicked(self) -> None:
@@ -972,7 +917,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if self._active_driver is not None:
                 self._active_driver.pause()  # type: ignore[attr-defined]
         except Exception:
-            pass
+            logger.debug("Pause failed", exc_info=True)
 
     @QtCore.Slot()
     def _on_step_clicked(self) -> None:
@@ -1042,7 +987,7 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self.controls.set_timeline(0, 0, total_episodes=0, current_episode=0)
         except Exception:
-            pass
+            logger.debug("Timeline refresh failed", exc_info=True)
 
     @QtCore.Slot(object)
     def _on_step_event(self, ev) -> None:
@@ -1053,7 +998,7 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self._total_reward += float(getattr(ev, "reward", 0.0))
         except Exception:
-            pass
+            logger.debug("Reward extraction failed in step event", exc_info=True)
         t = getattr(ev, "t", "?")
         term = bool(getattr(ev, "terminated", False))
         trunc = bool(getattr(ev, "truncated", False))
@@ -1091,13 +1036,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot(str)
     def _on_driver_error(self, message: str) -> None:
-        try:
-            msg = str(message).strip()
-            if not msg:
-                msg = "Error"
-            self.statusBar().showMessage(msg, 6000)
-        except Exception:
-            pass
+        msg = str(message).strip() or "Unknown error"
+        logger.warning("Driver error: %s", msg)
+        self.statusBar().showMessage(msg, 6000)
 
     @QtCore.Slot(str)
     def _on_mode_changed(self, mode: str) -> None:
@@ -1124,11 +1065,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 bool(self.controls.explore_check.isChecked())
             )
         except Exception:
-            pass
+            logger.debug("Failed to set explore on new driver", exc_info=True)
         try:
             self.live_config_widget.set_applied_config(cfg_obj)
         except Exception:
-            pass
+            logger.debug("Failed to update config widget", exc_info=True)
 
         if self._active_mode == "live":
             self._switch_driver(self.live_driver)
@@ -1152,15 +1093,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 try:
                     self.live_driver.error_occurred.connect(self._on_driver_error)  # type: ignore[attr-defined]
                 except Exception:
-                    pass
+                    logger.debug("Failed to connect error_occurred for background init", exc_info=True)
             try:
                 self.live_driver.initialize()
             finally:
                 if hasattr(self.live_driver, "error_occurred"):
                     try:
                         self.live_driver.error_occurred.disconnect(self._on_driver_error)  # type: ignore[attr-defined]
-                    except Exception:
-                        pass
+                    except (TypeError, RuntimeError):
+                        pass  # Not connected
 
         try:
             if cfg_obj.seed is None:
@@ -1168,18 +1109,18 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self.controls.seed_edit.setText(str(int(cfg_obj.seed)))
         except Exception:
-            pass
+            logger.debug("Failed to update seed field", exc_info=True)
 
         try:
             if old_live is not None and hasattr(old_live, "close"):
                 old_live.close()  # type: ignore[attr-defined]
         except Exception:
-            pass
+            logger.debug("Old driver close failed", exc_info=True)
         try:
             if old_live is not None and hasattr(old_live, "deleteLater"):
                 old_live.deleteLater()  # type: ignore[attr-defined]
         except Exception:
-            pass
+            logger.debug("Old driver deleteLater failed", exc_info=True)
 
         self.statusBar().showMessage("Applied live config", 2000)
 
@@ -1234,7 +1175,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 current_episode=cur_ep,
             )
         except Exception:
-            pass
+            logger.debug("Timeline change handler failed", exc_info=True)
 
     def _load_replay_from_path(self, path: Path) -> None:
         self._total_reward = 0.0
@@ -1264,11 +1205,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.replay_driver.get_resolved_replay_config()
             )
         except Exception:
-            pass
+            logger.debug("Failed to set replay config payload", exc_info=True)
         try:
             self.inspector.set_grid_size(*self.replay_driver.get_grid_size())
         except Exception:
-            pass
+            logger.debug("Failed to set grid size from replay", exc_info=True)
         self._refresh_timeline_controls()
 
     # Preferences ------------------------------------------------------------
@@ -1280,20 +1221,20 @@ class MainWindow(QtWidgets.QMainWindow):
             try:
                 self.prefs.save_json_file()
             except Exception:
-                pass
+                logger.warning("Failed to save preferences to JSON file", exc_info=True)
             # Apply display-related prefs
             self._apply_inspector_prefs()
             self._apply_theme(self.prefs.theme)
             try:
                 self.action_toggle_overlays.setChecked(bool(self.prefs.show_overlays))
             except Exception:
-                pass
+                logger.debug("Failed to update overlay toggle", exc_info=True)
             try:
                 self.controls.interval_spin.setValue(
                     int(self.prefs.default_interval_ms)
                 )
             except Exception:
-                pass
+                logger.debug("Failed to update interval spinner", exc_info=True)
 
     def _apply_inspector_prefs(self) -> None:
         try:
@@ -1301,7 +1242,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.inspector.set_show_preview(self.prefs.show_preview)
             self.inspector.set_show_sparkline(self.prefs.show_sparkline)
         except Exception:
-            pass
+            logger.debug("Inspector prefs application failed", exc_info=True)
 
     def _apply_theme(self, theme: str) -> None:
         try:
@@ -1312,7 +1253,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     QtWidgets.QApplication.style().standardPalette()
                 )
         except Exception:
-            pass
+            logger.debug("Theme application failed", exc_info=True)
 
     def _enable_dark_palette(self) -> None:
         pal = QtGui.QPalette()
@@ -1377,7 +1318,8 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         try:
             self.live_driver.set_policy_explore(bool(enabled))
-        except Exception as exc:  # pragma: no cover - UI safety
+        except Exception as exc:
+            logger.warning("Explore toggle failed: %s", exc)
             self.statusBar().showMessage(f"Explore toggle failed: {exc}", 3000)
 
     @QtCore.Slot()
@@ -2024,7 +1966,7 @@ class InspectorWidget(QtWidgets.QWidget):
             else:
                 self.action_panel.distribution_label.setText("distribution: N/A")
         except Exception:
-            pass
+            logger.debug("InspectorWidget.on_step_event failed", exc_info=True)
 
     @QtCore.Slot(list)
     def on_action_names(self, names: list[str]) -> None:
@@ -2053,19 +1995,14 @@ class InspectorWidget(QtWidgets.QWidget):
                     names = self._mux.get_pipeline()  # type: ignore[attr-defined]
                     self._pipeline_text = f"Pipeline: {format_pipeline(list(names))}"
                 except Exception:
-                    pass
+                    logger.debug("Pipeline extraction from mux failed", exc_info=True)
             # Update source label to indicate provider
-            try:
-                self.action_panel.source_label.setText("source: provider")
-            except Exception:
-                pass
+            self.action_panel.source_label.setText("source: provider")
             self._update_strict_banner()
         except Exception:
+            logger.debug("on_mux_changed failed", exc_info=True)
             self._mux = None
-            try:
-                self.action_panel.source_label.setText("source: none")
-            except Exception:
-                pass
+            self.action_panel.source_label.setText("source: none")
             self._update_strict_banner()
 
     def set_strict_provider_only(self, flag: bool) -> None:
@@ -2077,19 +2014,19 @@ class InspectorWidget(QtWidgets.QWidget):
         try:
             self.obs_panel.set_show_pipeline(flag)
         except Exception:
-            pass
+            logger.debug("set_show_pipeline failed", exc_info=True)
 
     def set_show_preview(self, flag: bool) -> None:
         try:
             self.obs_panel.set_show_preview(flag)
         except Exception:
-            pass
+            logger.debug("set_show_preview failed", exc_info=True)
 
     def set_show_sparkline(self, flag: bool) -> None:
         try:
             self.obs_panel.set_show_sparkline(flag)
         except Exception:
-            pass
+            logger.debug("set_show_sparkline failed", exc_info=True)
 
     def _label_for_action_index(self, idx: int, *, include_index: bool = True) -> str:
         name = None
