@@ -5,8 +5,12 @@ Tests that the factory correctly assembles environments from components
 with various configuration options.
 """
 
+import numpy as np
 import pytest
+from pathlib import Path
 
+from plume_nav_sim.data_zoo.download import DatasetDownloadError
+from plume_nav_sim.envs import factory as env_factory
 from plume_nav_sim.envs.factory import create_component_environment
 
 
@@ -203,3 +207,89 @@ class TestComponentEnvironmentFactory:
 
         env1.close()
         env2.close()
+
+
+def test_movie_dataset_id_uses_cached_registry_dataset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset_dir = tmp_path / "cached_registry.zarr"
+    dataset_dir.mkdir()
+
+    seen: dict[str, object] = {}
+
+    def fake_ensure_dataset_available(
+        dataset_id: str,
+        *,
+        cache_root,
+        auto_download: bool,
+        verify_checksum: bool,
+    ):
+        seen["dataset_id"] = dataset_id
+        seen["cache_root"] = cache_root
+        seen["auto_download"] = auto_download
+        seen["verify_checksum"] = verify_checksum
+        return dataset_dir
+
+    class DummyVideoPlume:
+        def __init__(self, cfg) -> None:
+            seen["movie_cfg_path"] = cfg.path
+            self.grid_size = env_factory.GridSize(width=16, height=12)
+            self.field_array = np.zeros((12, 16), dtype=np.float32)
+
+    monkeypatch.setattr(
+        env_factory, "ensure_dataset_available", fake_ensure_dataset_available
+    )
+    monkeypatch.setattr(env_factory, "VideoPlume", DummyVideoPlume)
+
+    env = create_component_environment(
+        plume="movie",
+        movie_dataset_id="colorado_jet_v1",
+    )
+    obs, _ = env.reset(seed=7)
+    assert obs.shape == (1,)
+    env.close()
+
+    assert seen["dataset_id"] == "colorado_jet_v1"
+    assert seen["auto_download"] is False
+    assert seen["verify_checksum"] is True
+    assert seen["movie_cfg_path"] == str(dataset_dir)
+
+
+def test_movie_dataset_id_missing_cache_has_clear_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_ensure_dataset_available(*_args, **_kwargs):
+        raise DatasetDownloadError(
+            "Dataset 'colorado_jet_v1' missing from cache; set auto_download=True "
+            "or approve the download to fetch from registry."
+        )
+
+    monkeypatch.setattr(
+        env_factory, "ensure_dataset_available", fake_ensure_dataset_available
+    )
+
+    with pytest.raises(ValueError, match="set auto_download=True"):
+        create_component_environment(
+            plume="movie",
+            movie_dataset_id="colorado_jet_v1",
+        )
+
+
+def test_movie_dataset_id_unknown_has_known_id_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_ensure_dataset_available(*_args, **_kwargs):
+        raise KeyError("missing")
+
+    monkeypatch.setattr(
+        env_factory, "ensure_dataset_available", fake_ensure_dataset_available
+    )
+    monkeypatch.setattr(
+        env_factory, "get_dataset_registry", lambda: {"known_dataset": object()}
+    )
+
+    with pytest.raises(ValueError, match="known_dataset"):
+        create_component_environment(
+            plume="movie",
+            movie_dataset_id="missing_dataset",
+        )

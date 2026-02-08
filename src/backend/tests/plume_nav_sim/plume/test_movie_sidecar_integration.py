@@ -43,6 +43,10 @@ def test_resolve_movie_dataset_path_video_sidecar_integration(tmp_path: Path) ->
     try:
         import imageio.v3 as iio  # type: ignore
 
+        # Video ingest requires Zarr + codecs; skip when optional media deps are absent.
+        pytest.importorskip("zarr")
+        pytest.importorskip("numcodecs")
+
         from plume_nav_sim.media.sidecar import get_default_sidecar_path
         from plume_nav_sim.plume.video import resolve_movie_dataset_path
     except Exception as e:  # pragma: no cover - optional media deps

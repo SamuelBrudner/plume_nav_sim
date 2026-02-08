@@ -13,6 +13,9 @@ from ..actions import DiscreteGridActions, OrientedGridActions
 from ..actions.oriented_run_tumble import OrientedRunTumbleActions
 from ..constants import DEFAULT_SOURCE_LOCATION
 from ..core.geometry import Coordinates, GridSize
+from ..data_zoo.download import DatasetDownloadError, ensure_dataset_available
+from ..data_zoo.loader import load_plume
+from ..data_zoo.registry import DEFAULT_CACHE_ROOT, get_dataset_registry
 from ..observations import AntennaeArraySensor, ConcentrationSensor, WindVectorSensor
 from ..plume.gaussian import GaussianPlume
 from ..plume.video import VideoConfig, VideoPlume, resolve_movie_dataset_path
@@ -104,7 +107,7 @@ def create_component_environment(  # noqa: C901
     movie_h5_dataset: Optional[str] = None,
     movie_step_policy: Literal["wrap", "clamp"] = "wrap",
     movie_normalize: str | None = None,
-    movie_chunks: Any = "auto",
+    movie_chunks: Any = None,
     movie_data: Any = None,
     enable_wind: bool = False,
     wind_direction_deg: float = 0.0,
@@ -166,23 +169,17 @@ def create_component_environment(  # noqa: C901
 
     # Create plume/concentration field
     if plume == "movie":
-        if not movie_path:
-            if movie_dataset_id is not None:
-                raise ValueError(
-                    "movie_dataset_id is no longer supported; provide movie_path instead"
-                )
-            raise ValueError("env.plume=movie requires movie.path to be provided")
-
-        if movie_auto_download or movie_cache_root is not None:
+        if not movie_path and not movie_dataset_id:
             raise ValueError(
-                "movie_auto_download/movie_cache_root are not supported; provide movie_path directly"
+                "env.plume=movie requires movie.path or movie.dataset_id to be provided"
             )
 
+        cache_root = Path(movie_cache_root) if movie_cache_root else DEFAULT_CACHE_ROOT
         dataset_path = _resolve_movie_dataset(
             movie_path=movie_path,
             movie_dataset_id=movie_dataset_id,
             movie_auto_download=movie_auto_download,
-            movie_cache_root=movie_cache_root,
+            movie_cache_root=cache_root,
             movie_fps=movie_fps,
             movie_pixel_to_grid=movie_pixel_to_grid,
             movie_origin=movie_origin,
@@ -197,11 +194,26 @@ def create_component_environment(  # noqa: C901
             if resolved is not None:
                 goal_location = Coordinates(x=resolved[0], y=resolved[1])
 
-        if movie_normalize is not None or movie_chunks is not None:
-            raise ValueError(
-                "movie_normalize/movie_chunks are no longer supported; pre-normalize data before passing movie_data"
-            )
         data_array = movie_data
+        if data_array is None and movie_dataset_id:
+            if movie_normalize is not None or movie_chunks is not None:
+                chunks = "auto" if movie_chunks is None else movie_chunks
+                try:
+                    data_array = load_plume(
+                        movie_dataset_id,
+                        normalize=movie_normalize,
+                        cache_root=cache_root,
+                        auto_download=movie_auto_download,
+                        chunks=chunks,
+                    )
+                except Exception as exc:
+                    raise ValueError(
+                        f"Failed loading registry dataset '{movie_dataset_id}' with normalization/chunking: {exc}"
+                    ) from exc
+        elif movie_normalize is not None or movie_chunks is not None:
+            raise ValueError(
+                "movie_normalize/movie_chunks are only supported with movie_dataset_id"
+            )
 
         # For raw media sources (non-directory movie_path values), treat the
         # sidecar as the single source of truth for movie-level metadata. Once
@@ -303,23 +315,36 @@ def _resolve_movie_dataset(
 ) -> Path:
     """Resolve dataset path via registry or direct path/ingest."""
 
-    if not movie_path:
-        raise ValueError("env.plume=movie requires movie.path to be provided")
+    # Explicit paths (including raw media) take precedence over registry ids so
+    # callers can override a curated dataset with a local copy.
+    if movie_path:
+        return resolve_movie_dataset_path(
+            movie_path,
+            fps=movie_fps,
+            pixel_to_grid=movie_pixel_to_grid,
+            origin=movie_origin,
+            extent=movie_extent,
+            movie_h5_dataset=movie_h5_dataset,
+        )
 
     if movie_dataset_id:
-        raise ValueError(
-            "movie_dataset_id is no longer supported; provide movie_path instead"
-        )
-    if movie_auto_download or movie_cache_root is not None:
-        raise ValueError(
-            "movie_auto_download/movie_cache_root are not supported; provide movie_path directly"
-        )
+        cache_root = Path(movie_cache_root) if movie_cache_root else DEFAULT_CACHE_ROOT
+        try:
+            return ensure_dataset_available(
+                movie_dataset_id,
+                cache_root=cache_root,
+                auto_download=movie_auto_download,
+                verify_checksum=True,
+            )
+        except KeyError as exc:
+            known = sorted(get_dataset_registry().keys())
+            known_hint = f" Known ids: {', '.join(known)}." if known else ""
+            raise ValueError(
+                f"Unknown movie dataset id '{movie_dataset_id}'.{known_hint}"
+            ) from exc
+        except DatasetDownloadError as exc:
+            raise ValueError(str(exc)) from exc
 
-    return resolve_movie_dataset_path(
-        movie_path,
-        fps=movie_fps,
-        pixel_to_grid=movie_pixel_to_grid,
-        origin=movie_origin,
-        extent=movie_extent,
-        movie_h5_dataset=movie_h5_dataset,
+    raise ValueError(
+        "env.plume=movie requires movie.path or movie.dataset_id to be provided"
     )

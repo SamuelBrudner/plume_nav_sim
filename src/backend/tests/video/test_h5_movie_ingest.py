@@ -17,6 +17,10 @@ def test_h5_movie_ingest_and_loader_smoke(tmp_path: Path) -> None:
         import h5py  # type: ignore
         import xarray as xr  # type: ignore
 
+        # HDF5 ingest requires optional Zarr deps; skip when not installed.
+        pytest.importorskip("zarr")
+        pytest.importorskip("numcodecs")
+
         from plume_nav_sim.media import (
             MANIFEST_FILENAME,
             get_default_manifest_path,
