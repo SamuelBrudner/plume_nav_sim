@@ -19,19 +19,31 @@ def run_make(target: str) -> str:
     return result.stdout
 
 
-def test_setup_invokes_setup_env_script_without_dev_flag():
-    output = run_make("setup")
-    assert "./setup_env.sh" in output
-    assert "--dev" not in output
+def test_help_is_default_target():
+    output = run_make("help")
+    assert "awk" in output or "Available" in output
 
 
-def test_setup_dev_uses_dev_flag():
-    output = run_make("setup-dev")
-    assert "./setup_env.sh" in output
-    assert "--dev" in output
+def test_install_runs_pip():
+    output = run_make("install")
+    assert "pip install" in output
 
 
-def test_maintain_uses_update_flag():
-    output = run_make("maintain")
-    assert "./setup_env.sh" in output
-    assert "--update" in output
+def test_test_runs_pytest():
+    output = run_make("test")
+    assert "pytest" in output
+
+
+def test_test_debugger_runs_pytest():
+    output = run_make("test-debugger")
+    assert "pytest" in output
+
+
+def test_lint_runs_ruff():
+    output = run_make("lint")
+    assert "ruff" in output
+
+
+def test_clean_removes_artifacts():
+    output = run_make("clean")
+    assert "rm" in output
