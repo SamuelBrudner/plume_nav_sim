@@ -53,3 +53,16 @@ Frames can be saved to disk or assembled into video with external tools.
 - `PlumeEnv.render()` → `src/backend/plume_nav_sim/envs/plume_env.py`
 - `ComponentBasedEnvironment.render()` → `src/backend/plume_nav_sim/envs/component_env.py`
 - `DataCaptureWrapper.render()` → `src/backend/plume_nav_sim/data_capture/wrapper.py`
+
+## Recording Video
+
+Use `save_video` to record frames as GIF or MP4:
+
+```python
+from plume_nav_sim.utils.video import save_video
+
+# frames is a list of np.ndarray (H, W, 3) from env.render()
+save_video(frames, "episode.gif", fps=10)
+```
+
+See `examples/save_video_example.py` for a complete runnable script.
