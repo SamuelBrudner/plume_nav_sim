@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import math
@@ -1439,11 +1440,25 @@ class LiveConfigWidget(QtWidgets.QWidget):
         self.movie_path_edit.setPlaceholderText("path to zarr/h5/avi (optional)")
         self.movie_browse_btn = QtWidgets.QToolButton()
         self.movie_browse_btn.setText("…")
+        self.movie_auto_download_check = QtWidgets.QCheckBox()
+        self.movie_auto_download_check.setText("Download if missing (registry datasets only)")
+        self.movie_cache_root_edit = QtWidgets.QLineEdit()
+        self.movie_cache_root_edit.setPlaceholderText(
+            "override cache root (registry datasets only)"
+        )
+        self.movie_cache_root_browse_btn = QtWidgets.QToolButton()
+        self.movie_cache_root_browse_btn.setText("…")
         movie_path_row = QtWidgets.QWidget()
         movie_path_layout = QtWidgets.QHBoxLayout(movie_path_row)
         movie_path_layout.setContentsMargins(0, 0, 0, 0)
         movie_path_layout.addWidget(self.movie_path_edit, 1)
         movie_path_layout.addWidget(self.movie_browse_btn, 0)
+
+        movie_cache_root_row = QtWidgets.QWidget()
+        movie_cache_root_layout = QtWidgets.QHBoxLayout(movie_cache_root_row)
+        movie_cache_root_layout.setContentsMargins(0, 0, 0, 0)
+        movie_cache_root_layout.addWidget(self.movie_cache_root_edit, 1)
+        movie_cache_root_layout.addWidget(self.movie_cache_root_browse_btn, 0)
 
         form.addRow("Seed", self.seed_edit)
         form.addRow("Plume", self.plume_combo)
@@ -1452,6 +1467,8 @@ class LiveConfigWidget(QtWidgets.QWidget):
         form.addRow("Max steps", self.max_steps_spin)
         form.addRow("Movie dataset id", self.movie_dataset_edit)
         form.addRow("Movie path", movie_path_row)
+        form.addRow("Movie auto-download", self.movie_auto_download_check)
+        form.addRow("Movie cache root", movie_cache_root_row)
         layout.addLayout(form)
 
         btn_row = QtWidgets.QHBoxLayout()
@@ -1476,7 +1493,12 @@ class LiveConfigWidget(QtWidgets.QWidget):
         self.seed_edit.editingFinished.connect(self._on_fields_changed)
         self.movie_dataset_edit.editingFinished.connect(self._on_fields_changed)
         self.movie_path_edit.editingFinished.connect(self._on_fields_changed)
+        self.movie_auto_download_check.stateChanged.connect(
+            lambda _v=None: self._on_fields_changed()
+        )
+        self.movie_cache_root_edit.editingFinished.connect(self._on_fields_changed)
         self.movie_browse_btn.clicked.connect(self._browse_movie_path)
+        self.movie_cache_root_browse_btn.clicked.connect(self._browse_movie_cache_root)
         self.apply_btn.clicked.connect(self._emit_apply)
         self.revert_btn.clicked.connect(self._revert_to_applied)
 
@@ -1572,15 +1594,29 @@ class LiveConfigWidget(QtWidgets.QWidget):
             )
         except Exception:
             self.movie_path_edit.setText("")
+        try:
+            self.movie_auto_download_check.setChecked(bool(cfg.movie_auto_download))
+        except Exception:
+            self.movie_auto_download_check.setChecked(False)
+        try:
+            self.movie_cache_root_edit.setText(
+                "" if cfg.movie_cache_root is None else str(cfg.movie_cache_root)
+            )
+        except Exception:
+            self.movie_cache_root_edit.setText("")
 
         self._sync_movie_enabled()
         self._updating = False
 
     def _sync_movie_enabled(self) -> None:
         is_movie = str(self.plume_combo.currentText()).strip().lower() == "movie"
+        has_dataset_id = bool(self.movie_dataset_edit.text().strip())
         self.movie_dataset_edit.setEnabled(is_movie)
         self.movie_path_edit.setEnabled(is_movie)
         self.movie_browse_btn.setEnabled(is_movie)
+        self.movie_auto_download_check.setEnabled(is_movie and has_dataset_id)
+        self.movie_cache_root_edit.setEnabled(is_movie and has_dataset_id)
+        self.movie_cache_root_browse_btn.setEnabled(is_movie and has_dataset_id)
 
     @QtCore.Slot(str)
     def _on_preset_selected(self, name: str) -> None:
@@ -1608,6 +1644,7 @@ class LiveConfigWidget(QtWidgets.QWidget):
         if self._updating:
             return
         self._apply_fields_to_draft()
+        self._sync_movie_enabled()
         self._update_preview()
 
     @QtCore.Slot(str)
@@ -1622,10 +1659,14 @@ class LiveConfigWidget(QtWidgets.QWidget):
             self._draft.plume = "static"
             self._draft.movie_dataset_id = None
             self._draft.movie_path = None
+            self._draft.movie_auto_download = False
+            self._draft.movie_cache_root = None
             self._updating = True
             try:
                 self.movie_dataset_edit.setText("")
                 self.movie_path_edit.setText("")
+                self.movie_auto_download_check.setChecked(False)
+                self.movie_cache_root_edit.setText("")
             finally:
                 self._updating = False
         self._update_preview()
@@ -1664,9 +1705,16 @@ class LiveConfigWidget(QtWidgets.QWidget):
             self._draft.movie_dataset_id = ds if ds else None
             mp = self.movie_path_edit.text().strip()
             self._draft.movie_path = mp if mp else None
+            self._draft.movie_auto_download = bool(
+                self.movie_auto_download_check.isChecked()
+            )
+            cr = self.movie_cache_root_edit.text().strip()
+            self._draft.movie_cache_root = cr if cr else None
         else:
             self._draft.movie_dataset_id = None
             self._draft.movie_path = None
+            self._draft.movie_auto_download = False
+            self._draft.movie_cache_root = None
 
     @QtCore.Slot()
     def _browse_movie_path(self) -> None:
@@ -1691,6 +1739,25 @@ class LiveConfigWidget(QtWidgets.QWidget):
                 )
             if path:
                 self.movie_path_edit.setText(str(path))
+                if self.plume_combo.currentText().strip().lower() != "movie":
+                    self.plume_combo.setCurrentText("movie")
+                self._on_fields_changed()
+        except Exception:
+            pass
+
+    @QtCore.Slot()
+    def _browse_movie_cache_root(self) -> None:
+        try:
+            start_dir = str(Path.home())
+            cur = self.movie_cache_root_edit.text().strip()
+            if cur:
+                with contextlib.suppress(Exception):
+                    start_dir = str(Path(cur).expanduser().resolve())
+            path = QtWidgets.QFileDialog.getExistingDirectory(
+                self, "Select cache root (registry datasets)", start_dir
+            )
+            if path:
+                self.movie_cache_root_edit.setText(str(path))
                 if self.plume_combo.currentText().strip().lower() != "movie":
                     self.plume_combo.setCurrentText("movie")
                 self._on_fields_changed()

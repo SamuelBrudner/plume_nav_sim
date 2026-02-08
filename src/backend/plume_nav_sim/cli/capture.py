@@ -508,14 +508,35 @@ def _capture_env_config(
 
 
 def _run_capture(
-    env: object, w: int, h: int, *, args: argparse.Namespace, cfg_hash: Optional[str]
+    env: object,
+    w: int,
+    h: int,
+    *,
+    args: argparse.Namespace,
+    cfg_hash: Optional[str],
+    capture_cfg: Optional[dict] = None,
 ) -> None:
     rec = RunRecorder(
         args.output, experiment=args.experiment, rotate_size_bytes=args.rotate_size
     )
     cfg = _capture_env_config(env, default_grid=(w, h))
+    meta_overrides: dict[str, object] = {}
+    if cfg_hash:
+        meta_overrides["config_hash"] = cfg_hash
+    if isinstance(capture_cfg, dict):
+        # Preserve richer plume/movie config for replay tooling without
+        # expanding the stable EnvironmentConfig schema.
+        env_group = capture_cfg.get("env")
+        if isinstance(env_group, dict):
+            meta_overrides["env"] = env_group
+        movie_group = capture_cfg.get("movie")
+        if isinstance(movie_group, dict):
+            meta_overrides["movie"] = movie_group
     wrapped = DataCaptureWrapper(
-        env, rec, cfg, meta_overrides={"config_hash": cfg_hash} if cfg_hash else None
+        env,
+        rec,
+        cfg,
+        meta_overrides=(meta_overrides or None),
     )
 
     base_seed = int(args.seed)
@@ -540,12 +561,14 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     env = None
     cfg_hash: Optional[str] = None
+    capture_cfg: Optional[dict] = None
     if args.config_name:
         cfg, cfg_hash = _load_hydra_config(
             config_name=str(args.config_name),
             config_path=args.config_path,
             overrides=overrides,
         )
+        capture_cfg = cfg
         try:
             env, w, h = _env_from_cfg(cfg, action_type_override=args.action_type)
         except ValueError as exc:
@@ -570,7 +593,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         if w is None or h is None:  # type: ignore[truthy-bool]
             raise SystemExit("Unable to resolve grid dimensions for EnvironmentConfig")
-        _run_capture(env, w, h, args=args, cfg_hash=cfg_hash)
+        _run_capture(env, w, h, args=args, cfg_hash=cfg_hash, capture_cfg=capture_cfg)
     finally:
         with contextlib.suppress(Exception):
             env.close()

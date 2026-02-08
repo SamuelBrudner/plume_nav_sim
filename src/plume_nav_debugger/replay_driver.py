@@ -167,15 +167,104 @@ class ReplayDriver(QtCore.QObject):
         return self._last_event
 
     def get_resolved_env_kwargs(self, *, render: bool = False) -> dict[str, Any]:
-        _ = render
-        return {}
+        if self._engine is None:
+            return {}
+
+        meta = getattr(self._engine, "run_meta", None)
+        if meta is None:
+            return {}
+
+        env_cfg = meta.env_config if isinstance(getattr(meta, "env_config", None), dict) else {}
+        extra = meta.extra if isinstance(getattr(meta, "extra", None), dict) else {}
+
+        kwargs: dict[str, Any] = {}
+
+        grid = env_cfg.get("grid_size")
+        if isinstance(grid, (tuple, list)) and len(grid) == 2:
+            with contextlib.suppress(Exception):
+                kwargs["grid_size"] = (int(grid[0]), int(grid[1]))
+
+        src = env_cfg.get("source_location")
+        if isinstance(src, (tuple, list)) and len(src) == 2:
+            with contextlib.suppress(Exception):
+                kwargs["source_location"] = (int(src[0]), int(src[1]))
+
+        with contextlib.suppress(Exception):
+            if env_cfg.get("max_steps") is not None:
+                kwargs["max_steps"] = int(env_cfg["max_steps"])
+        with contextlib.suppress(Exception):
+            if env_cfg.get("goal_radius") is not None:
+                kwargs["goal_radius"] = float(env_cfg["goal_radius"])
+
+        plume_params = env_cfg.get("plume_params")
+        if isinstance(plume_params, dict):
+            kwargs["plume_params"] = plume_params
+
+        # Render configuration is always best-effort in replay mode.
+        if render:
+            kwargs["render_mode"] = "rgb_array"
+
+        # Forward any richer capture config if present in RunMeta.extra.
+        env_extra = extra.get("env")
+        if isinstance(env_extra, dict):
+            for key in ("action_type", "observation_type", "reward_type", "plume"):
+                if key in env_extra and env_extra[key] is not None:
+                    kwargs[key] = env_extra[key]
+
+        movie_extra = extra.get("movie")
+        if isinstance(movie_extra, dict):
+            # Hydra/capture config schema -> make_env kwargs
+            mapping = {
+                "path": "movie_path",
+                "dataset_id": "movie_dataset_id",
+                "auto_download": "movie_auto_download",
+                "cache_root": "movie_cache_root",
+                "fps": "movie_fps",
+                "pixel_to_grid": "movie_pixel_to_grid",
+                "origin": "movie_origin",
+                "extent": "movie_extent",
+                "step_policy": "movie_step_policy",
+                "h5_dataset": "movie_h5_dataset",
+                "normalize": "movie_normalize",
+                "chunks": "movie_chunks",
+            }
+            for src_key, dst_key in mapping.items():
+                val = movie_extra.get(src_key)
+                if val is None:
+                    continue
+                if dst_key in {"movie_pixel_to_grid", "movie_origin", "movie_extent"}:
+                    if isinstance(val, (tuple, list)) and len(val) == 2:
+                        with contextlib.suppress(Exception):
+                            kwargs[dst_key] = (float(val[0]), float(val[1]))
+                    continue
+                kwargs[dst_key] = val
+
+        # Also support flat keys in extra (e.g., demo capture mode).
+        for key in (
+            "plume",
+            "movie_path",
+            "movie_dataset_id",
+            "movie_auto_download",
+            "movie_cache_root",
+            "movie_fps",
+            "movie_step_policy",
+            "movie_h5_dataset",
+            "movie_normalize",
+            "movie_chunks",
+        ):
+            if key in extra and extra[key] is not None:
+                kwargs[key] = extra[key]
+
+        return kwargs
 
     def get_resolved_replay_config(self) -> dict[str, Any]:
         if self._engine is None:
             return {}
+        meta = getattr(self._engine, "run_meta", None)
         return {
             "run_dir": str(self._run_dir) if self._run_dir is not None else None,
-            "env_config": getattr(self._engine.run_meta, "env_config", None),
+            "run_meta": meta.to_dict() if hasattr(meta, "to_dict") else meta,
+            "env_kwargs": self.get_resolved_env_kwargs(render=False),
         }
 
     @QtCore.Slot()

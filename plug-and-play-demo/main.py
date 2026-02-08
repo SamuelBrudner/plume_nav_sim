@@ -634,7 +634,32 @@ def main() -> None:
 
     rec = RunRecorder(args.capture_root, experiment=args.experiment)
     env_cfg = EnvironmentConfig(grid_size=(w, h), source_location=(w // 2, h // 2))
-    env_wrapped = DataCaptureWrapper(env, rec, env_cfg)
+    meta_overrides = {
+        "env": {
+            "plume": sim.plume,
+            "action_type": sim.action_type,
+            "observation_type": sim.observation_type,
+            "reward_type": sim.reward_type,
+            "max_steps": sim.max_steps,
+            "grid_size": sim.grid_size,
+        },
+        "movie": {
+            "path": sim.movie_path,
+            "dataset_id": sim.movie_dataset_id,
+            "auto_download": bool(sim.movie_auto_download),
+            "cache_root": sim.movie_cache_root,
+            "fps": sim.movie_fps,
+            "pixel_to_grid": sim.movie_pixel_to_grid,
+            "origin": sim.movie_origin,
+            "extent": sim.movie_extent,
+            "step_policy": sim.movie_step_policy,
+            "h5_dataset": sim.movie_h5_dataset,
+            "normalize": sim.movie_normalize,
+            "chunks": sim.movie_chunks,
+        },
+        "policy": sim.policy.model_dump(mode="json"),
+    }
+    env_wrapped = DataCaptureWrapper(env, rec, env_cfg, meta_overrides=meta_overrides)
 
     frames: List[np.ndarray] = []
 
