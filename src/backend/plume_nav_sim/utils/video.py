@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+# Usage:
+#   from plume_nav_sim.utils.video import save_video
+#   save_video(frames, 'output.gif', fps=10)
+
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -14,14 +18,48 @@ _DEFAULT_CODECS = {
 
 
 def _import_imageio_v3():
+    """Import imageio.v3 if available; otherwise return None."""
     try:
         import imageio.v3 as iio
+    except ImportError:
+        return None
+    return iio
+
+
+def _import_pillow_image():
+    try:
+        from PIL import Image
     except ImportError as exc:
         raise ImportError(
-            "imageio is required for video export. Install media extras with "
-            "'pip install plume-nav-sim[media]'."
+            "Pillow is required for GIF fallback when imageio is unavailable. "
+            "Install it with 'pip install Pillow'."
         ) from exc
-    return iio
+    return Image
+
+
+def _save_gif_with_pillow(
+    frames: list[np.ndarray],
+    output: Path,
+    *,
+    fps: int,
+) -> None:
+    Image = _import_pillow_image()
+    pil_frames = [Image.fromarray(frame) for frame in frames]
+    frame_duration_ms = max(1, int(round(1000 / fps)))
+    pil_frames[0].save(
+        str(output),
+        save_all=True,
+        append_images=pil_frames[1:],
+        duration=frame_duration_ms,
+        loop=0,
+    )
+
+
+def _raise_imageio_required() -> None:
+    raise ImportError(
+        "imageio is required for video export. Install media extras with "
+        "'pip install plume-nav-sim[media]'."
+    )
 
 
 def _validate_frame(frame: np.ndarray) -> None:
@@ -97,16 +135,30 @@ def save_video(
         raise ValueError("No frames available to write.")
 
     iio = _import_imageio_v3()
-    write_kwargs = {"fps": int(fps)}
+    if iio is not None:
+        write_kwargs = {"fps": int(fps)}
+
+        if ext == ".gif":
+            write_kwargs["loop"] = 0
+        else:
+            selected_codec = codec if codec is not None else _DEFAULT_CODECS.get(ext)
+            if selected_codec is not None:
+                write_kwargs["codec"] = selected_codec
+
+        iio.imwrite(str(output), frames, **write_kwargs)
+        return
 
     if ext == ".gif":
-        write_kwargs["loop"] = 0
-    else:
-        selected_codec = codec if codec is not None else _DEFAULT_CODECS.get(ext)
-        if selected_codec is not None:
-            write_kwargs["codec"] = selected_codec
+        try:
+            _save_gif_with_pillow(frames, output, fps=int(fps))
+            return
+        except ImportError as exc:
+            raise ImportError(
+                "Video export requires imageio or Pillow for GIF output. "
+                "Install media extras with 'pip install plume-nav-sim[media]'."
+            ) from exc
 
-    iio.imwrite(str(output), frames, **write_kwargs)
+    _raise_imageio_required()
 
 
 __all__ = ["frames_from_events", "save_video"]
