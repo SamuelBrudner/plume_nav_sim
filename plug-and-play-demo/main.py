@@ -12,7 +12,6 @@ import numpy as np
 from plume_nav_sim.config.composition import (
     PolicySpec,
     SimulationSpec,
-    WrapperSpec,
     prepare,
 )
 from plume_nav_sim.envs.config_types import EnvironmentConfig
@@ -20,6 +19,7 @@ from plume_nav_sim.runner import runner
 
 DEMO_ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 DEFAULT_MOVIE_ZARR = DEMO_ASSETS_DIR / "gaussian_plume_demo.zarr"
+WrapperSpec = SimulationSpec.WrapperSpec
 
 # Quick reference for demo behavior:
 # - Imports plume_nav_sim as a library only (policy is defined in this demo)
