@@ -1,61 +1,31 @@
-SHELL := /bin/bash
-MAKEFLAGS += --warn-undefined-variables
+.DEFAULT_GOAL := help
 
-SETUP_SCRIPT := ./setup_env.sh
-ENV_NAME ?= plume_nav_sim
-PYTHON_VERSION ?= 3.10
-DEV ?= 0
+.PHONY: help install test test-debugger lint demo demo-debugger clean
 
-ifeq ($(DEV),1)
-DEV_FLAG := --dev
-else
-DEV_FLAG :=
-endif
+help: ## Print available targets
+	@echo "Available targets:"
+	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-.PHONY: setup setup-dev maintain lint
+install: ## Editable install with dev extras
+	pip install -e src/backend[dev]
 
-setup:
-	$(SETUP_SCRIPT) --name $(ENV_NAME) --python $(PYTHON_VERSION) $(DEV_FLAG)
+test: ## Run backend tests
+	cd src/backend && python -m pytest --tb=short -q
 
-setup-dev:
-	$(SETUP_SCRIPT) --name $(ENV_NAME) --python $(PYTHON_VERSION) --dev
+test-debugger: ## Run debugger tests
+	python -m pytest tests/debugger --tb=short -q
 
-maintain:
-	$(SETUP_SCRIPT) --name $(ENV_NAME) --python $(PYTHON_VERSION) --update $(DEV_FLAG)
+lint: ## Run backend lint checks
+	cd src/backend && python -m ruff check .
 
-.PHONY: dev-core install-qt debugger
+demo: ## Run a quick 50-step episode
+	python -c "import plume_nav_sim as pns; env = pns.make_env(grid_size=(32,32), max_steps=50, render_mode='rgb_array'); obs, info = env.reset(seed=42); done = False; t = 0;\
+while not done:\
+    obs, r, term, trunc, info = env.step(env.action_space.sample()); t += 1; done = term or trunc;\
+print(f'Episode complete: {t} steps'); env.close()"
 
-# Editable install of backend/core in the conda env
-dev-core:
-	conda run -n $(ENV_NAME) pip install -e src/backend
+demo-debugger: ## Launch the debugger GUI
+	python -m plume_nav_debugger
 
-# Install Qt toolkit for the debugger UI (PySide6)
-install-qt:
-	conda run -n $(ENV_NAME) python -m pip install "PySide6>=6.7.0"
-
-# Run the debugger from source without packaging (uses PYTHONPATH)
-debugger:
-	PYTHONPATH=src conda run -n $(ENV_NAME) python -m plume_nav_debugger.app
-
-.PHONY: nb-clean
-# Strip outputs/exec counts from notebooks in-place for clean commits
-nb-clean:
-	python src/backend/scripts/strip_notebook_outputs.py notebooks/*.ipynb
-
-.PHONY: nb-render
-# Render the stable capture exploration notebook to docs via nbconvert
-nb-render:
-	@mkdir -p src/backend/docs/notebooks
-	conda run -n $(ENV_NAME) jupyter nbconvert --to html \
-		--output-dir src/backend/docs/notebooks \
-		notebooks/stable/capture_end_to_end.ipynb
-
-# Lint the library exactly like CI (flake8)
-lint:
-	@echo "[lint] Running flake8 with CI-equivalent options"
-	conda run -n $(ENV_NAME) flake8 src/backend/plume_nav_sim \
-		--max-line-length=88 \
-		--extend-ignore=E203,W503,E501 \
-		--select=E,W,F,C,N \
-		--max-complexity=10 \
-		--per-file-ignores="src/backend/plume_nav_sim/__init__.py:F401,F403,F405,src/backend/plume_nav_sim/envs/base_env.py:C901,src/backend/plume_nav_sim/core/episode_manager.py:C901"
+clean: ## Remove build and cache artifacts
+	rm -rf src/backend/dist src/backend/*.egg-info **/__pycache__
