@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 try:
     from PySide6 import QtCore
@@ -71,11 +71,11 @@ class ReplayDriver(QtCore.QObject):
 
     def total_episodes(self) -> int:
         if self._engine is None:
-            return 0
+            return len(self._episode_starts)
         try:
             return self._engine.total_episodes()
         except Exception:
-            return 0
+            return len(self._episode_starts)
 
     def current_index(self) -> int:
         return self._index
@@ -89,6 +89,105 @@ class ReplayDriver(QtCore.QObject):
             if start <= idx:
                 ep += 1
         return max(0, ep - 1)
+
+    def episode_starts(self) -> list[int]:
+        return list(self._episode_starts)
+
+    def get_timeline_markers(self) -> dict[str, list[int]]:
+        """Return marker indices suitable for MarkerSlider."""
+
+        if not self.is_loaded():
+            return {}
+
+        terminated: list[int] = []
+        truncated: list[int] = []
+        goal: list[int] = []
+        for i, ev in enumerate(self._events):
+            if bool(getattr(ev, "terminated", False)):
+                terminated.append(i)
+            if bool(getattr(ev, "truncated", False)):
+                truncated.append(i)
+            if self._is_goal_reached(ev):
+                goal.append(i)
+
+        return {
+            "episode": list(self._episode_starts),
+            "terminated": terminated,
+            "truncated": truncated,
+            "goal": goal,
+        }
+
+    def jump_prev_episode(self) -> bool:
+        idx = self._find_prev_episode_start()
+        if idx is None:
+            return False
+        self.seek_to(idx, auto_emit=True)
+        return True
+
+    def jump_next_episode(self) -> bool:
+        idx = self._find_next_episode_start()
+        if idx is None:
+            return False
+        self.seek_to(idx, auto_emit=True)
+        return True
+
+    def jump_next_done(self) -> bool:
+        idx = self._find_next_index(self._is_done)
+        if idx is None:
+            return False
+        self.seek_to(idx, auto_emit=True)
+        return True
+
+    def jump_next_goal(self) -> bool:
+        idx = self._find_next_index(self._is_goal_reached)
+        if idx is None:
+            return False
+        self.seek_to(idx, auto_emit=True)
+        return True
+
+    def _find_prev_episode_start(self) -> int | None:
+        if not self.is_loaded():
+            return None
+        cur = int(self._index)
+        for start in reversed(self._episode_starts):
+            if start < cur:
+                return int(start)
+        return None
+
+    def _find_next_episode_start(self) -> int | None:
+        if not self.is_loaded():
+            return None
+        cur = int(self._index)
+        for start in self._episode_starts:
+            if start > cur:
+                return int(start)
+        return None
+
+    def _find_next_index(self, pred: Callable[[object], bool]) -> int | None:
+        if not self.is_loaded():
+            return None
+        start = min(max(int(self._index) + 1, 0), len(self._events))
+        for i in range(start, len(self._events)):
+            try:
+                if pred(self._events[i]):
+                    return i
+            except Exception:
+                continue
+        return None
+
+    def _is_goal_reached(self, ev: object) -> bool:
+        info = getattr(ev, "info", None)
+        if isinstance(info, dict) and bool(info.get("goal_reached")):
+            return True
+        # Fallback: treat termination as goal reached for standard gym semantics.
+        return bool(getattr(ev, "terminated", False)) and not bool(
+            getattr(ev, "truncated", False)
+        )
+
+    def _is_done(self, ev: object) -> bool:
+        return bool(getattr(ev, "terminated", False)) or bool(
+            getattr(ev, "truncated", False)
+        )
 
     def is_running(self) -> bool:
         return bool(self._running)

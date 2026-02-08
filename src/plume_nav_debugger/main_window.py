@@ -161,6 +161,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controls.load_replay.connect(self._on_load_replay)
         self.controls.seek_requested.connect(self._on_seek_requested)
         self.controls.episode_seek_requested.connect(self._on_episode_seek_requested)
+        self.controls.jump_prev_episode_requested.connect(self._on_jump_prev_episode)
+        self.controls.jump_next_episode_requested.connect(self._on_jump_next_episode)
+        self.controls.jump_next_done_requested.connect(self._on_jump_next_done)
+        self.controls.jump_next_goal_requested.connect(self._on_jump_next_goal)
         try:
             self.live_driver.set_policy_explore(
                 bool(self.controls.explore_check.isChecked())
@@ -313,6 +317,7 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception:
                 logger.debug("Replay label update failed", exc_info=True)
         self._refresh_timeline_controls()
+        self._refresh_replay_markers()
 
     # UI wiring --------------------------------------------------------------
     @QtCore.Slot()
@@ -414,6 +419,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.controls.set_timeline(0, 0, total_episodes=0, current_episode=0)
         except Exception:
             logger.debug("Timeline refresh failed", exc_info=True)
+
+    def _refresh_replay_markers(self) -> None:
+        try:
+            if self._active_mode == "replay" and self.replay_driver.is_loaded():
+                self.controls.set_replay_markers(self.replay_driver.get_timeline_markers())
+            else:
+                self.controls.set_replay_markers({})
+        except Exception:
+            logger.debug("Replay marker refresh failed", exc_info=True)
 
     @QtCore.Slot(object)
     def _on_step_event(self, ev) -> None:
@@ -586,6 +600,50 @@ class MainWindow(QtWidgets.QMainWindow):
         self.replay_driver.seek_to_episode(int(episode_index))
         self._refresh_timeline_controls()
 
+    @QtCore.Slot()
+    def _on_jump_prev_episode(self) -> None:
+        if self._active_mode != "replay" or not self.replay_driver.is_loaded():
+            self.statusBar().showMessage("Replay navigation is available in replay mode only", 2500)
+            return
+        self._total_reward = 0.0
+        self._status.setText("t=0  reward_total=0.00  term=False trunc=False")
+        if not self.replay_driver.jump_prev_episode():
+            self.statusBar().showMessage("No previous episode", 2500)
+        self._refresh_timeline_controls()
+
+    @QtCore.Slot()
+    def _on_jump_next_episode(self) -> None:
+        if self._active_mode != "replay" or not self.replay_driver.is_loaded():
+            self.statusBar().showMessage("Replay navigation is available in replay mode only", 2500)
+            return
+        self._total_reward = 0.0
+        self._status.setText("t=0  reward_total=0.00  term=False trunc=False")
+        if not self.replay_driver.jump_next_episode():
+            self.statusBar().showMessage("No next episode", 2500)
+        self._refresh_timeline_controls()
+
+    @QtCore.Slot()
+    def _on_jump_next_done(self) -> None:
+        if self._active_mode != "replay" or not self.replay_driver.is_loaded():
+            self.statusBar().showMessage("Replay navigation is available in replay mode only", 2500)
+            return
+        self._total_reward = 0.0
+        self._status.setText("t=0  reward_total=0.00  term=False trunc=False")
+        if not self.replay_driver.jump_next_done():
+            self.statusBar().showMessage("No later termination/truncation event", 2500)
+        self._refresh_timeline_controls()
+
+    @QtCore.Slot()
+    def _on_jump_next_goal(self) -> None:
+        if self._active_mode != "replay" or not self.replay_driver.is_loaded():
+            self.statusBar().showMessage("Replay navigation is available in replay mode only", 2500)
+            return
+        self._total_reward = 0.0
+        self._status.setText("t=0  reward_total=0.00  term=False trunc=False")
+        if not self.replay_driver.jump_next_goal():
+            self.statusBar().showMessage("No later goal reached event", 2500)
+        self._refresh_timeline_controls()
+
     @QtCore.Slot(int, int)
     def _on_timeline_changed(self, current: int, total: int) -> None:
         try:
@@ -637,6 +695,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             logger.debug("Failed to set grid size from replay", exc_info=True)
         self._refresh_timeline_controls()
+        self._refresh_replay_markers()
 
     # Preferences ------------------------------------------------------------
     def _open_preferences(self) -> None:

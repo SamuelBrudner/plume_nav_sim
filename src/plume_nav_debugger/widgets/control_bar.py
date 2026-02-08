@@ -7,6 +7,8 @@ except Exception as e:  # pragma: no cover - GUI import guard
         "PySide6 is required for the debugger app. Install it in your env (e.g., conda run -n plume-nav-sim pip install PySide6)."
     ) from e
 
+from plume_nav_debugger.widgets.marker_slider import MarkerSlider
+
 
 class ControlBar(QtWidgets.QWidget):
     start = QtCore.Signal()
@@ -19,6 +21,10 @@ class ControlBar(QtWidgets.QWidget):
     seek_requested = QtCore.Signal(int)
     episode_seek_requested = QtCore.Signal(int)
     explore_toggled = QtCore.Signal(bool)
+    jump_prev_episode_requested = QtCore.Signal()
+    jump_next_episode_requested = QtCore.Signal()
+    jump_next_done_requested = QtCore.Signal()
+    jump_next_goal_requested = QtCore.Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -82,10 +88,35 @@ class ControlBar(QtWidgets.QWidget):
 
         # Replay timeline row (hidden in live mode)
         self._timeline_row = QtWidgets.QWidget()
-        replay_row = QtWidgets.QHBoxLayout(self._timeline_row)
-        replay_row.setContentsMargins(0, 0, 0, 0)
+        replay_box = QtWidgets.QVBoxLayout(self._timeline_row)
+        replay_box.setContentsMargins(0, 0, 0, 0)
+        replay_top = QtWidgets.QHBoxLayout()
+        replay_bottom = QtWidgets.QHBoxLayout()
+
         self.replay_label = QtWidgets.QLabel("Replay: none loaded")
-        self.timeline_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.timeline_status = QtWidgets.QLabel("Step: -/-")
+        self.episode_status = QtWidgets.QLabel("Episode: -/-")
+
+        self.prev_episode_btn = QtWidgets.QToolButton()
+        self.prev_episode_btn.setText("Prev Ep")
+        self.next_episode_btn = QtWidgets.QToolButton()
+        self.next_episode_btn.setText("Next Ep")
+        self.next_done_btn = QtWidgets.QToolButton()
+        self.next_done_btn.setText("Next Done")
+        self.next_goal_btn = QtWidgets.QToolButton()
+        self.next_goal_btn.setText("Next Goal")
+
+        replay_top.addWidget(self.replay_label, stretch=1)
+        replay_top.addSpacing(8)
+        replay_top.addWidget(self.timeline_status)
+        replay_top.addWidget(self.episode_status)
+        replay_top.addSpacing(8)
+        replay_top.addWidget(self.prev_episode_btn)
+        replay_top.addWidget(self.next_episode_btn)
+        replay_top.addWidget(self.next_done_btn)
+        replay_top.addWidget(self.next_goal_btn)
+
+        self.timeline_slider = MarkerSlider(QtCore.Qt.Horizontal)
         self.timeline_slider.setRange(0, 0)
         self.timeline_slider.setEnabled(False)
         self.timeline_spin = QtWidgets.QSpinBox()
@@ -94,18 +125,15 @@ class ControlBar(QtWidgets.QWidget):
         self.episode_spin = QtWidgets.QSpinBox()
         self.episode_spin.setRange(1, 1)
         self.episode_spin.setEnabled(False)
-        self.timeline_status = QtWidgets.QLabel("Step: -/-")
-        self.episode_status = QtWidgets.QLabel("Episode: -/-")
 
-        replay_row.addWidget(self.replay_label)
-        replay_row.addSpacing(8)
-        replay_row.addWidget(self.timeline_slider, stretch=1)
-        replay_row.addWidget(self.timeline_spin)
-        replay_row.addSpacing(6)
-        replay_row.addWidget(QtWidgets.QLabel("Episode:"))
-        replay_row.addWidget(self.episode_spin)
-        replay_row.addWidget(self.timeline_status)
-        replay_row.addWidget(self.episode_status)
+        replay_bottom.addWidget(self.timeline_slider, stretch=1)
+        replay_bottom.addWidget(self.timeline_spin)
+        replay_bottom.addSpacing(6)
+        replay_bottom.addWidget(QtWidgets.QLabel("Episode:"))
+        replay_bottom.addWidget(self.episode_spin)
+
+        replay_box.addLayout(replay_top)
+        replay_box.addLayout(replay_bottom)
         self._timeline_row.setVisible(False)
 
         layout.addLayout(main_row)
@@ -124,10 +152,15 @@ class ControlBar(QtWidgets.QWidget):
         self.timeline_spin.editingFinished.connect(self._emit_seek_from_spin)
         self.timeline_slider.valueChanged.connect(self._sync_slider_spin)
         self.episode_spin.editingFinished.connect(self._emit_seek_from_episode)
+        self.prev_episode_btn.clicked.connect(self.jump_prev_episode_requested)
+        self.next_episode_btn.clicked.connect(self.jump_next_episode_requested)
+        self.next_done_btn.clicked.connect(self.jump_next_done_requested)
+        self.next_goal_btn.clicked.connect(self.jump_next_goal_requested)
         # Expose additional signals
         # Note: MainWindow will connect signals directly to handlers
 
         self._updating_timeline = False
+        self._set_jump_enabled(False)
 
     @QtCore.Slot()
     def _emit_reset(self) -> None:
@@ -147,6 +180,13 @@ class ControlBar(QtWidgets.QWidget):
         self.explore_check.setEnabled(not is_replay)
         self.seed_edit.setEnabled(not is_replay)
         self._timeline_row.setVisible(is_replay)
+
+    def set_replay_markers(self, markers: dict[str, list[int]] | None) -> None:
+        try:
+            self.timeline_slider.set_markers(markers or {})
+        except Exception:
+            # Markers are a best-effort visual aid.
+            pass
 
     def set_replay_label(self, text: str) -> None:
         self.replay_label.setText(f"Replay: {text}")
@@ -171,6 +211,7 @@ class ControlBar(QtWidgets.QWidget):
             self.timeline_spin.setRange(0, 0)
             self.timeline_spin.setValue(0)
             self.timeline_status.setText("Step: -/-")
+            self._set_jump_enabled(False)
         else:
             max_idx = max(0, total - 1)
             cur = min(max_idx, max(cur, 0))
@@ -181,6 +222,7 @@ class ControlBar(QtWidgets.QWidget):
             self.timeline_slider.setValue(cur)
             self.timeline_spin.setValue(cur)
             self.timeline_status.setText(f"Step: {cur}/{max_idx}")
+            self._set_jump_enabled(True)
         if ep_total is None or ep_total <= 0:
             self.episode_spin.setEnabled(False)
             self.episode_spin.setRange(1, 1)
@@ -221,3 +263,9 @@ class ControlBar(QtWidgets.QWidget):
         if not self._updating_timeline:
             self.timeline_spin.setValue(int(value))
 
+    def _set_jump_enabled(self, enabled: bool) -> None:
+        flag = bool(enabled)
+        self.prev_episode_btn.setEnabled(flag)
+        self.next_episode_btn.setEnabled(flag)
+        self.next_done_btn.setEnabled(flag)
+        self.next_goal_btn.setEnabled(flag)
