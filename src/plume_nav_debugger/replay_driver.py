@@ -13,6 +13,7 @@ except Exception as e:  # pragma: no cover - GUI import guard
 
 try:
     from plume_nav_sim.data_capture.replay import ReplayEngine, ReplayLoadError
+    from plume_nav_sim.data_capture.replay import ReplayConsistencyError
     from plume_nav_sim.data_capture.replay import ReplayStepEvent as _ReplayStepEvent
     from plume_nav_sim.data_capture.replay import load_replay_engine
 except Exception as e:  # pragma: no cover - optional dependency guard
@@ -26,6 +27,8 @@ class ReplayDriver(QtCore.QObject):
     timeline_changed = QtCore.Signal(int, int)
     step_done = QtCore.Signal(object)
     episode_finished = QtCore.Signal()
+    error_occurred = QtCore.Signal(str)
+    replay_validation_failed = QtCore.Signal(object)  # payload: dict-like diff
 
     def __init__(self) -> None:
         super().__init__()
@@ -38,11 +41,33 @@ class ReplayDriver(QtCore.QObject):
         self._timer.timeout.connect(self._on_tick)
         self._running = False
         self._last_event: object | None = None
+        self._last_validation_diff: object | None = None
 
     def load_run(self, run_dir: str | Path) -> None:
         run_path = Path(run_dir)
         self._engine = load_replay_engine(str(run_path))
         self._run_dir = run_path
+        self._last_validation_diff = None
+
+        # Best-effort: validate by reconstructing and stepping the environment.
+        try:
+            import plume_nav_sim as pns
+
+            def _factory(_meta: object, render: bool) -> object:
+                kwargs = self.get_resolved_env_kwargs(render=render)
+                return pns.make_env(**kwargs)
+
+            self._engine.validate(env_factory=_factory, render=False)
+        except ReplayConsistencyError as exc:
+            self.error_occurred.emit(str(exc))
+            diff = getattr(exc, "diff", None)
+            if diff is not None:
+                payload = diff.to_dict() if hasattr(diff, "to_dict") else diff
+                self._last_validation_diff = payload
+                self.replay_validation_failed.emit(payload)
+        except Exception as exc:
+            # Validation is optional; failure should be visible but not block playback.
+            self.error_occurred.emit(f"Replay validation skipped: {exc}")
 
         # Materialize events once so seeking and reverse stepping is trivial.
         self._events = list(self._engine.iter_events(start_index=0, render=True))
@@ -309,6 +334,27 @@ class ReplayDriver(QtCore.QObject):
             for key in ("action_type", "observation_type", "reward_type", "plume"):
                 if key in env_extra and env_extra[key] is not None:
                     kwargs[key] = env_extra[key]
+        else:
+            # No captured env group: best-effort inference to recreate manual capture runs.
+            action_type = None
+            try:
+                steps = getattr(getattr(self._engine, "_artifacts", None), "steps", None)
+                if isinstance(steps, list) and steps:
+                    max_action = max(int(getattr(s, "action", 0)) for s in steps)
+                    if max_action >= 3:
+                        action_type = "discrete"
+                    elif max_action == 2:
+                        action_type = "oriented"
+                    else:
+                        # Ambiguous between oriented and run_tumble; default to capture CLI default.
+                        action_type = "oriented"
+            except Exception:
+                action_type = None
+            if action_type is None:
+                action_type = "oriented"
+            kwargs.setdefault("action_type", action_type)
+            kwargs.setdefault("observation_type", "concentration")
+            kwargs.setdefault("reward_type", "step_penalty")
 
         movie_extra = extra.get("movie")
         if isinstance(movie_extra, dict):

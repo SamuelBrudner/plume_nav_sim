@@ -31,6 +31,7 @@ from plume_nav_debugger.widgets.observation_panel_widget import (  # noqa: F401
 )
 from plume_nav_debugger.widgets.preferences_dialog import PreferencesDialog
 from plume_nav_debugger.widgets.replay_config_widget import ReplayConfigWidget
+from plume_nav_debugger.widgets.replay_diff_dialog import ReplayDiffDialog
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -46,6 +47,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.inspector = InspectorWidget(self)
         self.live_config_widget = LiveConfigWidget(cfg)
         self.replay_config_widget = ReplayConfigWidget()
+        self._replay_diff_dialog: ReplayDiffDialog | None = None
         self._total_reward: float = 0.0
 
         central = QtWidgets.QWidget()
@@ -253,6 +255,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ("run_meta_changed", self._on_run_meta),
             ("run_meta_changed", self.frame_view.on_run_meta),
             ("error_occurred", self._on_driver_error),
+            ("replay_validation_failed", self._on_replay_validation_failed),
             ("timeline_changed", self._on_timeline_changed),
         ]
         for signal_name, slot in _signal_pairs:
@@ -277,6 +280,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ("run_meta_changed", self._on_run_meta),
             ("run_meta_changed", self.frame_view.on_run_meta),
             ("error_occurred", self._on_driver_error),
+            ("replay_validation_failed", self._on_replay_validation_failed),
             ("timeline_changed", self._on_timeline_changed),
         ]
         for signal_name, slot in _signal_pairs:
@@ -479,6 +483,16 @@ class MainWindow(QtWidgets.QMainWindow):
         msg = str(message).strip() or "Unknown error"
         logger.warning("Driver error: %s", msg)
         self.statusBar().showMessage(msg, 6000)
+
+    @QtCore.Slot(object)
+    def _on_replay_validation_failed(self, payload: object) -> None:
+        try:
+            if self._replay_diff_dialog is None:
+                self._replay_diff_dialog = ReplayDiffDialog(self)
+            self._replay_diff_dialog.set_payload(payload)
+            self._replay_diff_dialog.open()
+        except Exception as exc:
+            self.statusBar().showMessage(f"Replay divergence dialog failed: {exc}", 6000)
 
     @QtCore.Slot(str)
     def _on_mode_changed(self, mode: str) -> None:
