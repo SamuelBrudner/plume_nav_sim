@@ -58,7 +58,7 @@ def _save_gif_with_pillow(
 def _raise_imageio_required() -> None:
     raise ImportError(
         "imageio is required for video export. Install media extras with "
-        "'pip install plume-nav-sim[media]'."
+        "'pip install plume-nav-sim[media]' (or from source: pip install -e \".[media]\")."
     )
 
 
@@ -155,7 +155,8 @@ def save_video(
         except ImportError as exc:
             raise ImportError(
                 "Video export requires imageio or Pillow for GIF output. "
-                "Install media extras with 'pip install plume-nav-sim[media]'."
+                "Install media extras with 'pip install plume-nav-sim[media]' "
+                "(or from source: pip install -e \".[media]\")."
             ) from exc
 
     _raise_imageio_required()

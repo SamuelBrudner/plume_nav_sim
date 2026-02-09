@@ -52,10 +52,10 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/SamuelBrudner/plume_nav_sim"
-Documentation = "https://plume-nav-sim.readthedocs.io"
+Documentation = "https://github.com/SamuelBrudner/plume_nav_sim/tree/main/src/backend/docs"
 Repository = "https://github.com/SamuelBrudner/plume_nav_sim.git"
 Issues = "https://github.com/SamuelBrudner/plume_nav_sim/issues"
-Changelog = "https://github.com/SamuelBrudner/plume_nav_sim/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/SamuelBrudner/plume_nav_sim/blob/main/src/backend/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = [
@@ -273,6 +273,7 @@ changelog_file = "src/backend/CHANGELOG.md"
 version_files = [
   "src/backend/pyproject.toml",
   "src/backend/conf/constants.yaml",
+  "src/backend/plume_nav_sim/constants.py",
 ]
 
 # Commit message used for version bumps

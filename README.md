@@ -3,14 +3,21 @@
 Gymnasium-compatible plume navigation environments engineered for reproducible simulations. Begin with a single `make_env()` call, customize through typed options, and inject bespoke components when experiments demand it.
 
 
-[![PyPI](https://img.shields.io/pypi/v/plume-nav-sim.svg)](https://pypi.org/project/plume-nav-sim/)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ## Install
 
+`plume-nav-sim` is not yet published to PyPI. Install from source:
+
 ```bash
-pip install plume-nav-sim
+pip install -e src/backend
+```
+
+Or install directly from GitHub (no clone required):
+
+```bash
+pip install "plume-nav-sim @ git+https://github.com/SamuelBrudner/plume_nav_sim.git#subdirectory=src/backend"
 ```
 
 ## 1. What You Get

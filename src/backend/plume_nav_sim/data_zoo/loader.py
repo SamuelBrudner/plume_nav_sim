@@ -34,7 +34,8 @@ def _open_zarr_dataset(path: Path, *, chunks: Any) -> "xr.Dataset":
     except Exception as exc:  # pragma: no cover - optional dependency
         raise ImportError(
             "load_plume requires optional dependency 'xarray'. "
-            "Install media extras: pip install plume-nav-sim[media]"
+            "Install media extras: pip install plume-nav-sim[media] "
+            "(or from source: pip install -e \".[media]\")"
         ) from exc
 
     def _open(consolidated: bool) -> "xr.Dataset":
@@ -126,7 +127,8 @@ def _apply_normalization(
     except Exception as exc:  # pragma: no cover - optional dependency
         raise ImportError(
             "load_plume normalization requires optional dependency 'xarray'. "
-            "Install media extras: pip install plume-nav-sim[media]"
+            "Install media extras: pip install plume-nav-sim[media] "
+            "(or from source: pip install -e \".[media]\")"
         ) from exc
 
     has_chunks = bool(getattr(var, "chunks", None))

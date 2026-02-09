@@ -1,7 +1,9 @@
 """Example: Record a plume navigation episode as a GIF.
 
 Works as a standalone script or copy-paste into a Jupyter notebook.
-Requires: pip install plume-nav-sim[media]
+Requires media extras:
+- PyPI (once published): pip install plume-nav-sim[media]
+- From source (repo): pip install -e ".[media]"
 """
 
 import plume_nav_sim as pns

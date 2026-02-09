@@ -660,7 +660,7 @@ jobs:
 
           ## 🔗 Documentation
 
-          - [API Reference](https://plume-nav-sim.readthedocs.io)
+          - [Docs](https://github.com/SamuelBrudner/plume_nav_sim/tree/main/src/backend/docs)
           - [User Guide](https://github.com/SamuelBrudner/plume_nav_sim/blob/main/docs/user_guide.py)
           - [Developer Guide](https://github.com/SamuelBrudner/plume_nav_sim/blob/main/docs/developer_guide.py)
           - [Examples](https://github.com/SamuelBrudner/plume_nav_sim/tree/main/examples)
@@ -860,7 +860,7 @@ jobs:
           echo "### 🔗 Links"
           echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.validate_release.outputs.version }})"
           echo "- [Repository](https://github.com/${{ github.repository }})"
-          echo "- [Documentation](https://plume-nav-sim.readthedocs.io)"
+          echo "- [Documentation](https://github.com/SamuelBrudner/plume_nav_sim/tree/main/src/backend/docs)"
           echo ""
           echo "### 🚀 Next Steps"
           echo "- Test the released package in a fresh environment"

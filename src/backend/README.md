@@ -2,7 +2,7 @@
 
 🧪 Proof-of-Life Gymnasium Environment for Plume Navigation Research
 
-[![PyPI](https://img.shields.io/pypi/v/plume-nav-sim.svg)](https://pypi.org/project/plume-nav-sim/) [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Gymnasium](https://img.shields.io/badge/gymnasium-0.29%2B-green.svg)](https://gymnasium.farama.org/) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Gymnasium](https://img.shields.io/badge/gymnasium-0.29%2B-green.svg)](https://gymnasium.farama.org/) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
 `plume-nav-sim` is a Gymnasium-compatible plume navigation environment built for researcher workflows: start quickly with a default setup, then plug in your own action, observation, and reward logic through a component architecture designed for controlled experimentation and reproducible comparisons. For direct component extension patterns, start with [`EXTENDING.md`](./EXTENDING.md).
 
@@ -11,7 +11,11 @@
 Install:
 
 ```bash
-pip install plume-nav-sim
+# Source install (recommended until PyPI publishing is set up)
+pip install -e .
+
+# Once published:
+# pip install plume-nav-sim
 ```
 
 Run a minimal episode (5 lines):
@@ -52,12 +56,15 @@ Requirements:
 - Python 3.10+
 - Gymnasium 0.29+
 
-PyPI extras:
+Extras:
 
 ```bash
-pip install plume-nav-sim[notebooks]  # Jupyter widgets
-pip install plume-nav-sim[media]      # video/movie plume support
-pip install plume-nav-sim[data]       # data capture and analysis
+pip install -e ".[notebooks]"  # Jupyter widgets
+pip install -e ".[media]"      # video/movie plume support
+pip install -e ".[data]"       # data capture and analysis
+
+# Once published:
+# pip install plume-nav-sim[media]
 ```
 
 Editable install for local development:
