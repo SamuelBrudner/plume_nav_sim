@@ -37,6 +37,27 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Validate tag version matches package version
+        if: github.event_name == 'push'
+        run: |
+          python - <<'PY'
+          import pathlib
+          import tomllib
+
+          tag = "${{ github.ref_name }}"
+          tag_version = tag[1:] if tag.startswith("v") else tag
+
+          pyproject = pathlib.Path("pyproject.toml")
+          data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+          project_version = data["project"]["version"]
+
+          if project_version != tag_version:
+              raise SystemExit(
+                  f"Tag version {tag_version!r} does not match project version {project_version!r}"
+              )
+          print(f"Version check ok: {project_version}")
+          PY
+
       - name: Build
         run: |
           python -m pip install --upgrade pip
