@@ -18,6 +18,15 @@ pip install -e .
 # pip install plume-nav-sim
 ```
 
+For another project, pin the Git tag in `pyproject.toml`:
+
+```toml
+[project]
+dependencies = [
+  "plume-nav-sim @ git+https://github.com/SamuelBrudner/plume_nav_sim.git@v0.1.0#subdirectory=src/backend",
+]
+```
+
 Run a minimal episode (5 lines):
 
 ```python

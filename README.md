@@ -20,6 +20,21 @@ Or install directly from GitHub (no clone required):
 pip install "plume-nav-sim @ git+https://github.com/SamuelBrudner/plume_nav_sim.git#subdirectory=src/backend"
 ```
 
+Use this pinned dependency in another project's `pyproject.toml`:
+
+```toml
+[project]
+dependencies = [
+  "plume-nav-sim @ git+https://github.com/SamuelBrudner/plume_nav_sim.git@v0.1.0#subdirectory=src/backend",
+]
+```
+
+Or in `requirements.txt`:
+
+```text
+plume-nav-sim @ git+https://github.com/SamuelBrudner/plume_nav_sim.git@v0.1.0#subdirectory=src/backend
+```
+
 ## 1. What You Get
 
 - **Turnkey environment** – `plume_nav_sim.make_env()` returns a Gymnasium-compatible environment with sensible defaults. Optional operational logging is available via `plume_nav_sim.logging.setup_logging`; analysis data capture is a separate workflow (see "Operational logging vs. data capture" below).

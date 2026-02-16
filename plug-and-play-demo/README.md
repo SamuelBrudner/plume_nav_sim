@@ -26,6 +26,8 @@ Quick start (how to run)
 
 - Prerequisite: install `plume_nav_sim` in your environment.
   - One‑liner (from repo root): `pip install -e src/backend`
+  - Pin from GitHub for external projects:
+    `pip install "plume-nav-sim @ git+https://github.com/SamuelBrudner/plume_nav_sim.git@v0.1.0#subdirectory=src/backend"`
   - Once published: `pip install plume-nav-sim`
 
 - From repo root:
