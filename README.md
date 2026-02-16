@@ -8,7 +8,13 @@ Gymnasium-compatible plume navigation environments engineered for reproducible s
 
 ## Install
 
-`plume-nav-sim` is not yet published to PyPI. Install from source:
+Install from PyPI once the release is published:
+
+```bash
+pip install plume-nav-sim
+```
+
+For unreleased changes, install from source:
 
 ```bash
 pip install -e src/backend
@@ -87,7 +93,7 @@ print(info["agent_xy"])  # starting position
 - Config usage (registry resolves path and verifies checksum):
 
   ```python
-  from plume_nav_sim.compose import SimulationSpec, prepare
+  from plume_nav_sim.config.composition import SimulationSpec, prepare
 
   sim = SimulationSpec(
       plume="movie",

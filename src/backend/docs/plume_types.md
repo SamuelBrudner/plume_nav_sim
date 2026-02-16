@@ -41,7 +41,7 @@ Select a plume source
 - Spec-first composition (`SimulationSpec` → `prepare()`):
 
   ```python
-  from plume_nav_sim.compose import SimulationSpec, PolicySpec, prepare
+  from plume_nav_sim.config.composition import SimulationSpec, PolicySpec, prepare
 
   # Static Gaussian
   sim = SimulationSpec(plume="static", plume_sigma=20.0)

@@ -11,11 +11,11 @@
 Install:
 
 ```bash
-# Source install (recommended until PyPI publishing is set up)
-pip install -e .
+# Preferred for released versions:
+pip install plume-nav-sim
 
-# Once published:
-# pip install plume-nav-sim
+# Local development:
+pip install -e .
 ```
 
 For another project, pin the Git tag in `pyproject.toml`:

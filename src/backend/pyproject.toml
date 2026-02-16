@@ -5,6 +5,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["plume_nav_sim"]
 
+[tool.hatch.build.targets.wheel.force-include]
+conf = "conf"
+
 [project]
 name = "plume-nav-sim"
 version = "0.1.0"
