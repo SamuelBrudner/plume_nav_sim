@@ -165,6 +165,9 @@ site/
 .spyderproject
 .spyproject
 
+# Windsurf
+.windsurf/
+
 # Sublime Text
 .sublime-project
 .sublime-workspace
@@ -315,6 +318,7 @@ env_cache/
 # Figure and plot outputs
 figure_cache/
 plot_outputs/
+plots/
 
 # =============================================================================
 # REINFORCEMENT LEARNING ARTIFACTS
