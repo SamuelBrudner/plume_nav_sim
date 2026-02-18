@@ -137,6 +137,7 @@ all = [
 
 [project.scripts]
 plume-nav-capture = "plume_nav_sim.cli.capture:main"
+plume-nav-data-zoo = "plume_nav_sim.data_zoo.cli:main"
 plume-nav-video-ingest = "plume_nav_sim.cli.video_ingest:main"
 
 [tool.pytest.ini_options]
