@@ -8,8 +8,8 @@ license: MIT
 repository-code: "https://github.com/SamuelBrudner/plume_nav_sim"
 url: "https://github.com/SamuelBrudner/plume_nav_sim"
 
-# Release date can be updated to match the tagged JOSS release
-date-released: 2025-11-20
+# Update to match the tagged JOSS release
+date-released: 2026-02-24
 
 keywords:
   - Python

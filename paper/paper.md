@@ -10,7 +10,7 @@ affiliations:
   - name: Molecular, Cellular, and Developmental Biology, Yale University, USA
     index: 1
 
-date: 2025-11-20
+date: 2026-02-24
 
 # JOSS metadata
 bibliography: paper.bib

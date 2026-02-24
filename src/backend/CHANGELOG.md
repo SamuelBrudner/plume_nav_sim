@@ -165,7 +165,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Static plume model only (no temporal dynamics)
 - Single-agent environments only
-- Local installation only (no PyPI distribution)
 - Limited to discrete action spaces
 - No continuous control or complex sensor models
 
