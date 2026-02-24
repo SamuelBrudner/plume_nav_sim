@@ -1,21 +1,21 @@
 """Tests for data_zoo stats.py and the _normalize_arg helper from loader.py.
 
 All tests are offline-safe -- no network access required.
-Zarr-dependent tests are skipped when the ``zarr`` package is not installed.
 """
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from plume_nav_sim.data_zoo.stats import normalize_array
-
-_HAS_ZARR = importlib.util.find_spec("zarr") is not None
-requires_zarr = pytest.mark.skipif(not _HAS_ZARR, reason="zarr is not installed")
+from plume_nav_sim.data_zoo.stats import (
+    compute_concentration_stats,
+    load_stats_from_zarr,
+    normalize_array,
+    store_stats_in_zarr,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -204,11 +204,8 @@ class TestNormalizeArrayUnknownMethod:
 # ===================================================================
 
 
-@requires_zarr
 class TestComputeConcentrationStats:
     def _compute(self, zarr_path, **kwargs):
-        from plume_nav_sim.data_zoo.stats import compute_concentration_stats
-
         return compute_concentration_stats(zarr_path, **kwargs)
 
     def test_basic_stats(self, zarr_store):
@@ -280,21 +277,14 @@ class TestComputeConcentrationStats:
 # ===================================================================
 
 
-@requires_zarr
 class TestStoreLoadStatsRoundTrip:
     def _store(self, zarr_path, stats):
-        from plume_nav_sim.data_zoo.stats import store_stats_in_zarr
-
         store_stats_in_zarr(zarr_path, stats)
 
     def _load(self, zarr_path):
-        from plume_nav_sim.data_zoo.stats import load_stats_from_zarr
-
         return load_stats_from_zarr(zarr_path)
 
     def _compute(self, zarr_path):
-        from plume_nav_sim.data_zoo.stats import compute_concentration_stats
-
         return compute_concentration_stats(zarr_path)
 
     def test_round_trip(self, zarr_store):

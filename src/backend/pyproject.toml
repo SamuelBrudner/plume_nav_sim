@@ -67,6 +67,7 @@ test = [
     "pytest-xdist>=3.0.0",
     "pytest-mock>=3.12.0",
     "hypothesis>=6.0.0",
+    "zarr>=2.16.0,<3",
 ]
 lint = [
     "black>=24.0.0",
@@ -120,7 +121,7 @@ media = [
     "imageio-ffmpeg>=0.4.9",
     "matplotlib>=3.9.0",
     "xarray>=2024.1.0",
-    "zarr>=2.16.0",
+    "zarr>=2.16.0,<3",
     "numcodecs>=0.12.0",
     "h5py>=3.11.0",
 ]
