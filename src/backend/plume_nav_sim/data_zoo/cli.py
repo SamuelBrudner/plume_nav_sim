@@ -6,6 +6,7 @@ Usage::
     python -m plume_nav_sim.data_zoo describe colorado_jet_v1
     python -m plume_nav_sim.data_zoo download colorado_jet_v1
     python -m plume_nav_sim.data_zoo cache-status
+    python -m plume_nav_sim.data_zoo validate
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from .registry import (
     DEFAULT_CACHE_ROOT,
     DATASET_REGISTRY,
     DatasetRegistryEntry,
+    RegistryValidationError,
     describe_dataset,
     validate_registry,
 )
@@ -127,7 +129,13 @@ def _cmd_describe(args: argparse.Namespace) -> int:
 
     lines.append(f"Artifact:    {entry.artifact.url}")
     lines.append(f"Checksum:    {entry.artifact.checksum_type}:{entry.artifact.checksum}")
-    lines.append(f"Cache path:  {entry.cache_path(Path(args.cache_root))}")
+
+    cache_path = entry.cache_path(Path(args.cache_root))
+    expected = cache_path / entry.expected_root
+    if expected.exists():
+        lines.append(f"Cached:      yes ({expected})")
+    else:
+        lines.append(f"Cached:      no  (would be at {expected})")
 
     print("\n".join(lines))
     return 0
@@ -135,15 +143,21 @@ def _cmd_describe(args: argparse.Namespace) -> int:
 
 def _cmd_download(args: argparse.Namespace) -> int:
     """Download (and ingest) a dataset into the local cache."""
-    from .download import DatasetDownloadError, ensure_dataset_available
+    from .download import (
+        ChecksumMismatchError,
+        DatasetDownloadError,
+        LayoutValidationError,
+        ensure_dataset_available,
+    )
 
     dataset_id: str = args.dataset_id
     try:
-        describe_dataset(dataset_id)
+        entry = describe_dataset(dataset_id)
     except KeyError:
         print(f"error: unknown dataset id '{dataset_id}'", file=sys.stderr)
         return 1
 
+    url = entry.artifact.url
     cache_root = Path(args.cache_root)
     try:
         path = ensure_dataset_available(
@@ -153,11 +167,53 @@ def _cmd_download(args: argparse.Namespace) -> int:
             force_download=bool(args.force),
             verify_checksum=True,
         )
+    except ChecksumMismatchError as exc:
+        print(
+            f"error: checksum mismatch for '{dataset_id}' (from {url})\n"
+            f"  {exc}\n"
+            f"  Hint: the file may be corrupt or partially downloaded. "
+            f"Try re-downloading with --force.",
+            file=sys.stderr,
+        )
+        return 2
+    except LayoutValidationError as exc:
+        print(
+            f"error: layout validation failed for '{dataset_id}' (from {url})\n"
+            f"  {exc}\n"
+            f"  Hint: try re-downloading with --force to replace the cached data.",
+            file=sys.stderr,
+        )
+        return 2
     except DatasetDownloadError as exc:
-        logger.error("download failed: %s", exc)
+        exc_str = str(exc)
+        is_network = any(
+            kw in exc_str.lower()
+            for kw in ("urlopen", "url", "http", "connection", "timeout", "network", "resolve")
+        )
+        if is_network:
+            print(
+                f"error: network error downloading '{dataset_id}' (from {url})\n"
+                f"  {exc}\n"
+                f"  Hint: check your internet connection and try again. "
+                f"If the URL looks wrong, file a bug.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"error: download failed for '{dataset_id}' (from {url})\n"
+                f"  {exc}\n"
+                f"  Hint: try --force to re-download, or file a bug if the "
+                f"problem persists.",
+                file=sys.stderr,
+            )
         return 2
     except Exception as exc:
-        logger.error("unexpected error: %s", exc)
+        print(
+            f"error: unexpected error for '{dataset_id}' (from {url})\n"
+            f"  {exc}\n"
+            f"  Hint: this may be a bug. Please file an issue with the full traceback.",
+            file=sys.stderr,
+        )
         return 2
 
     print(path)
@@ -174,6 +230,17 @@ def _cmd_cache_status(args: argparse.Namespace) -> int:
         cached = "yes" if expected.exists() else "no"
         rows.append([did, cached, str(expected)])
     _print_table(["DATASET_ID", "CACHED", "PATH"], rows)
+    return 0
+
+
+def _cmd_validate(args: argparse.Namespace) -> int:  # noqa: ARG001
+    """Validate the dataset registry for internal consistency."""
+    try:
+        validate_registry()
+    except RegistryValidationError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
+    print(f"ok: all {len(DATASET_REGISTRY)} registry entries are valid.")
     return 0
 
 
@@ -219,6 +286,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     # cache-status
     sub.add_parser("cache-status", help="Show cache status for all datasets")
 
+    # validate
+    sub.add_parser("validate", help="Validate registry for internal consistency")
+
     return p
 
 
@@ -242,6 +312,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "describe": _cmd_describe,
         "download": _cmd_download,
         "cache-status": _cmd_cache_status,
+        "validate": _cmd_validate,
     }
     handler = dispatch.get(args.command)
     if handler is None:

@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import tarfile
+import urllib.error
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -181,6 +182,11 @@ def _download_artifact(entry: DatasetRegistryEntry, dest: Path) -> None:
             )
 
         tmp_dest.replace(dest)
+    except urllib.error.HTTPError as exc:
+        raise DatasetDownloadError(
+            f"Failed to download {entry.dataset_id} from {url}: "
+            f"HTTP {exc.code} {exc.reason}"
+        ) from exc
     except Exception as exc:
         raise DatasetDownloadError(
             f"Failed to download {entry.dataset_id} from {url}: {exc}"

@@ -85,14 +85,21 @@ class TestDownload:
         rc, _out, _err = _run(["download", "nonexistent_dataset"], capsys)
         assert rc == 1
 
-    def test_download_fails_gracefully_no_network(self, capsys, tmp_path):
+    def test_download_fails_gracefully_no_network(self, capsys, tmp_path, monkeypatch):
         """Download with empty cache should fail with exit code 2 (no network)."""
+        import urllib.error
+
+        def _fake_urlopen(*args, **kwargs):
+            raise urllib.error.URLError("mocked network failure")
+
+        monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+
         rc, _out, _err = _run(
             ["--cache-root", str(tmp_path), "download", "colorado_jet_v1"],
             capsys,
         )
-        # Should fail because there's no cached data and likely no network
-        # in CI. Exit code 2 = download failure.
+        # Should fail because there's no cached data and network is mocked out.
+        # Exit code 2 = download failure.
         assert rc == 2
 
 
@@ -141,3 +148,55 @@ class TestTopLevel:
         with pytest.raises(SystemExit) as exc_info:
             main(["--help"])
         assert exc_info.value.code == 0
+
+
+# ---------------------------------------------------------------------------
+# validate subcommand
+# ---------------------------------------------------------------------------
+
+
+class TestValidate:
+    def test_exits_zero_on_valid_registry(self, capsys):
+        rc, out, _err = _run(["validate"], capsys)
+        assert rc == 0
+
+    def test_prints_ok_message(self, capsys):
+        rc, out, _err = _run(["validate"], capsys)
+        assert "ok" in out.lower()
+        assert str(len(DATASET_REGISTRY)) in out
+
+    def test_reports_failure_on_bad_registry(self, monkeypatch, capsys):
+        """Inject a broken entry and confirm validate reports FAIL."""
+        from plume_nav_sim.data_zoo.registry import (
+            DatasetArtifact,
+            DatasetMetadata,
+            DatasetRegistryEntry,
+        )
+
+        bad_entry = DatasetRegistryEntry(
+            dataset_id="bad_id",
+            version="0.0.0",
+            cache_subdir="test",
+            expected_root="test",
+            artifact=DatasetArtifact(
+                url="https://example.com/test.zip",
+                checksum="abc123",
+            ),
+            metadata=DatasetMetadata(
+                title="",  # empty title triggers validation error
+                description="test",
+                license="MIT",
+            ),
+        )
+        patched = dict(DATASET_REGISTRY)
+        patched["bad_id"] = bad_entry
+        monkeypatch.setattr(
+            "plume_nav_sim.data_zoo.cli.DATASET_REGISTRY", patched
+        )
+        monkeypatch.setattr(
+            "plume_nav_sim.data_zoo.registry.DATASET_REGISTRY", patched
+        )
+
+        rc, _out, err = _run(["validate"], capsys)
+        assert rc == 1
+        assert "FAIL" in err

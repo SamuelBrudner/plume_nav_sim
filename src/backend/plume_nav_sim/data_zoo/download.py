@@ -299,21 +299,26 @@ def _maybe_run_ingest(
 
 
 def _validate_layout(target_path: Path, layout: str) -> None:
+    _hint = " (hint: try re-downloading with force_download=True)"
     layout = layout.lower()
     if layout == "zarr":
         if not target_path.is_dir():
-            raise LayoutValidationError(f"Expected Zarr directory at {target_path}")
+            raise LayoutValidationError(
+                f"Expected Zarr directory at {target_path}{_hint}"
+            )
         zattrs = target_path / ".zattrs"
         if not zattrs.exists():
             raise LayoutValidationError(
-                f"Missing Zarr metadata (.zattrs) in {target_path}"
+                f"Missing Zarr metadata (.zattrs) in {target_path}{_hint}"
             )
     elif layout in ("hdf5", "h5"):
         if not target_path.is_file():
-            raise LayoutValidationError(f"Expected HDF5 file at {target_path}")
+            raise LayoutValidationError(
+                f"Expected HDF5 file at {target_path}{_hint}"
+            )
         if target_path.suffix.lower() not in {".h5", ".hdf5"}:
             raise LayoutValidationError(
-                f"Unexpected HDF5 extension for {target_path.name}"
+                f"Unexpected HDF5 extension for {target_path.name}{_hint}"
             )
     else:
         raise DatasetDownloadError(f"Unknown layout type: {layout}")
