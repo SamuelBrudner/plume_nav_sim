@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Run/Tumble action processor (`oriented_run_tumble`) and `RunTumbleTemporalDerivativePolicy`.
 - Temporal-derivative (TD) runner tests and demo notebooks (manual and via runner).
 - Parity tests verifying runner semantics match manual stepping (with/without render).
+- Opt-in runner heartbeat logging via `heartbeat_interval` for `run_episode()`, `stream()`, and `Runner` wrappers.
 - Optional dependency: `seaborn>=0.13.0` in `[project.optional-dependencies].notebooks`.
 - Pre-commit notebook hygiene: local hook and script to strip `.ipynb` outputs.
 

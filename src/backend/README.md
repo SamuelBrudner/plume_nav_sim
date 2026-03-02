@@ -37,6 +37,29 @@ obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
 env.close()
 ```
 
+## Runner Utilities
+
+For UI-agnostic execution helpers, use `plume_nav_sim.runner.runner`:
+
+- `stream(...)` yields per-step `StepEvent` records
+- `run_episode(...)` returns an `EpisodeResult` summary
+
+Both APIs support opt-in heartbeat logging via `heartbeat_interval` (steps):
+
+- Default is `None` (disabled)
+- Set a positive integer to log periodic INFO heartbeats
+
+```python
+from plume_nav_sim.runner import runner as r
+
+result = r.run_episode(
+    env,
+    policy,
+    max_steps=1000,
+    heartbeat_interval=100,  # log every 100 steps
+)
+```
+
 ## Extend It
 
 The fastest way to add your own navigation behavior is to build custom components and inject them into `ComponentBasedEnvironment`. Use `EXTENDING.md` as the researcher entry point: it shows minimal interfaces, implementation templates, and a full custom-components example.
