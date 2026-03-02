@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
+from numbers import Integral
 from typing import Any, Callable, Iterator, Optional, Protocol
 
 import numpy as np
@@ -55,6 +57,55 @@ class _RenderContext:
     fallback_successes: int = 0
     fallback_failures: int = 0
     frames_captured: int = 0
+
+
+@dataclass
+class _HeartbeatContext:
+    """Internal bookkeeping for optional periodic heartbeat logs."""
+
+    enabled: bool
+    interval_steps: int = 0
+    start_time: float = 0.0
+
+
+def _make_heartbeat_context(*, heartbeat_interval: Optional[int]) -> _HeartbeatContext:
+    if heartbeat_interval is None:
+        return _HeartbeatContext(enabled=False)
+    if not isinstance(heartbeat_interval, Integral):
+        raise TypeError("heartbeat_interval must be an integer")
+    interval = int(heartbeat_interval)
+    if interval <= 0:
+        raise ValueError("heartbeat_interval must be a positive integer")
+    return _HeartbeatContext(
+        enabled=True,
+        interval_steps=interval,
+        start_time=time.perf_counter(),
+    )
+
+
+def _maybe_log_heartbeat(
+    *,
+    ctx: _HeartbeatContext,
+    steps: int,
+    total_reward: float,
+    terminated: bool,
+    truncated: bool,
+) -> None:
+    if not ctx.enabled:
+        return
+    if steps <= 0 or steps % ctx.interval_steps != 0:
+        return
+
+    elapsed_s = max(time.perf_counter() - ctx.start_time, 1e-9)
+    steps_per_sec = steps / elapsed_s
+    logger.info(
+        "Heartbeat: steps=%d total_reward=%.6f terminated=%s truncated=%s steps_per_sec=%.2f",
+        steps,
+        total_reward,
+        terminated,
+        truncated,
+        steps_per_sec,
+    )
 
 
 def _reset_env_and_policy(
@@ -240,6 +291,7 @@ def run_episode(
     on_step: Optional[Callable[[StepEvent], None]] = None,
     on_episode_end: Optional[Callable[[EpisodeResult], None]] = None,
     render: bool = False,
+    heartbeat_interval: Optional[int] = None,
     policy_obs_adapter: Optional[PolicyObsAdapter] = None,
 ) -> EpisodeResult:
     # Reset env and policy deterministically when seed provided
@@ -251,6 +303,7 @@ def run_episode(
     terminated = False
     truncated = False
     render_ctx = _RenderContext(enabled=bool(render))
+    heartbeat_ctx = _make_heartbeat_context(heartbeat_interval=heartbeat_interval)
 
     while True:
         if max_steps is not None and steps >= max_steps:
@@ -274,6 +327,14 @@ def run_episode(
         obs = next_obs
         terminated = ev.terminated
         truncated = ev.truncated
+
+        _maybe_log_heartbeat(
+            ctx=heartbeat_ctx,
+            steps=steps,
+            total_reward=total_reward,
+            terminated=terminated,
+            truncated=truncated,
+        )
 
         if done:
             break
@@ -308,13 +369,17 @@ def stream(
     seed: Optional[int] = None,
     render: bool = False,
     on_step: Optional[Callable[[StepEvent], None]] = None,
+    heartbeat_interval: Optional[int] = None,
     policy_obs_adapter: Optional[PolicyObsAdapter] = None,
 ) -> Iterator[StepEvent]:
     obs = _reset_env_and_policy(env, policy, seed=seed)
     _ensure_action_space_compat(env, policy)
 
     t = 0
+    steps = 0
+    total_reward = 0.0
     render_ctx = _RenderContext(enabled=bool(render))
+    heartbeat_ctx = _make_heartbeat_context(heartbeat_interval=heartbeat_interval)
     while True:
         ev, next_obs, done = _step_once(
             env,
@@ -327,6 +392,16 @@ def stream(
 
         if on_step is not None:
             on_step(ev)
+
+        steps += 1
+        total_reward += float(ev.reward)
+        _maybe_log_heartbeat(
+            ctx=heartbeat_ctx,
+            steps=steps,
+            total_reward=total_reward,
+            terminated=ev.terminated,
+            truncated=ev.truncated,
+        )
 
         yield ev
 
@@ -363,6 +438,7 @@ class Runner:
         on_step: Optional[Callable[[StepEvent], None]] = None,
         on_episode_end: Optional[Callable[[EpisodeResult], None]] = None,
         render: bool = False,
+        heartbeat_interval: Optional[int] = None,
         policy_obs_adapter: Optional[PolicyObsAdapter] = None,
     ) -> EpisodeResult:
         adapter = (
@@ -378,6 +454,7 @@ class Runner:
             on_step=on_step,
             on_episode_end=on_episode_end,
             render=render,
+            heartbeat_interval=heartbeat_interval,
             policy_obs_adapter=adapter,
         )
 
@@ -387,6 +464,7 @@ class Runner:
         seed: Optional[int] = None,
         render: bool = False,
         on_step: Optional[Callable[[StepEvent], None]] = None,
+        heartbeat_interval: Optional[int] = None,
         policy_obs_adapter: Optional[PolicyObsAdapter] = None,
     ) -> Iterator[StepEvent]:
         adapter = (
@@ -400,5 +478,6 @@ class Runner:
             seed=seed,
             render=render,
             on_step=on_step,
+            heartbeat_interval=heartbeat_interval,
             policy_obs_adapter=adapter,
         )

@@ -14,10 +14,12 @@ and EpisodeResult contains: seed, steps, total_reward, terminated, truncated, me
 
 from __future__ import annotations
 
+import logging
 from typing import Iterator
 
 import gymnasium as gym
 import numpy as np
+import pytest
 
 import plume_nav_sim as pns
 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
@@ -34,6 +36,37 @@ def create_test_env(*, rgb: bool = False):
         max_steps=100,
         render_mode=("rgb_array" if rgb else None),
     )
+
+
+class _FixedLengthEnv:
+    def __init__(self, *, steps_to_terminate: int) -> None:
+        self.action_space = gym.spaces.Discrete(2)
+        self._steps_to_terminate = steps_to_terminate
+        self._step = 0
+
+    def reset(self, seed=None):
+        self._step = 0
+        return np.array([0.0], dtype=np.float32), {}
+
+    def step(self, action):  # noqa: ARG002
+        self._step += 1
+        obs = np.array([float(self._step)], dtype=np.float32)
+        reward = 1.0
+        terminated = self._step >= self._steps_to_terminate
+        truncated = False
+        info: dict[str, int] = {"step": self._step}
+        return obs, reward, terminated, truncated, info
+
+
+class _ZeroPolicy:
+    def __init__(self) -> None:
+        self.action_space = gym.spaces.Discrete(2)
+
+    def reset(self, *, seed=None):  # noqa: ARG002
+        return None
+
+    def select_action(self, observation, *, explore: bool = True):  # noqa: ARG002
+        return 0
 
 
 # Tests ---------------------------------------------------------------------
@@ -241,3 +274,53 @@ def test_runner_supports_dict_observations_with_adapter():
         policy.received[0], np.array([1.0, 1.0], dtype=np.float32)
     )
     assert isinstance(result.terminated, bool) and isinstance(result.truncated, bool)
+
+
+def test_run_episode_heartbeat_logs_when_enabled(caplog):
+    from plume_nav_sim.runner import runner as r
+
+    env = _FixedLengthEnv(steps_to_terminate=5)
+    policy = _ZeroPolicy()
+
+    with caplog.at_level(logging.INFO, logger=r.__name__):
+        result = r.run_episode(env, policy, heartbeat_interval=2)
+
+    assert result.steps == 5
+    heartbeats = [
+        rec.getMessage()
+        for rec in caplog.records
+        if rec.getMessage().startswith("Heartbeat:")
+    ]
+    assert len(heartbeats) == 2
+    assert "steps=2" in heartbeats[0]
+    assert "steps=4" in heartbeats[1]
+
+
+def test_stream_heartbeat_logs_when_enabled(caplog):
+    from plume_nav_sim.runner import runner as r
+
+    env = _FixedLengthEnv(steps_to_terminate=5)
+    policy = _ZeroPolicy()
+
+    with caplog.at_level(logging.INFO, logger=r.__name__):
+        events = list(r.stream(env, policy, heartbeat_interval=2))
+
+    assert len(events) == 5
+    heartbeats = [
+        rec.getMessage()
+        for rec in caplog.records
+        if rec.getMessage().startswith("Heartbeat:")
+    ]
+    assert len(heartbeats) == 2
+    assert "steps=2" in heartbeats[0]
+    assert "steps=4" in heartbeats[1]
+
+
+def test_heartbeat_interval_must_be_positive():
+    from plume_nav_sim.runner import runner as r
+
+    env = _FixedLengthEnv(steps_to_terminate=1)
+    policy = _ZeroPolicy()
+
+    with pytest.raises(ValueError, match="positive integer"):
+        _ = r.run_episode(env, policy, heartbeat_interval=0)
