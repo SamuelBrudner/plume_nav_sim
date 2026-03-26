@@ -129,17 +129,21 @@ Emonet smoke plume notes (manual staging + trimming)
   - These knobs live in `EmonetSmokeIngest` in `src/backend/plume_nav_sim/data_zoo/registry.py`.
 
 - Tuning smoke onset:
-  - A local (gitignored) helper script can compute background-subtracted mean intensity per frame and estimate an onset frame:
+  - Repo helper scripts can compute a background-subtracted mean-intensity CSV and then plot thresholded traces for onset tuning:
 
     ```bash
-    conda run -n plume-nav-sim python local_scripts/emonet_mean_intensity.py \
+    conda run -n plume-nav-sim python scripts/compute_emonet_mean_intensity.py \
       --mat "/path/to/2018_09_12_NA_3_3ds_5do_IS_1-frames.mat" \
+      --background-n 200 \
+      --out-csv /tmp/emonet_mean_intensity.csv
+
+    conda run -n plume-nav-sim python scripts/plot_emonet_mean_intensity.py \
+      --csv /tmp/emonet_mean_intensity.csv \
       --baseline-n 5 \
-      --sigma 5 \
-      --consecutive 10
+      --sigma 5
     ```
 
-  - Use the reported `onset_frame` to set `skip_initial_frames` (or to guide `trim_sigma`/`trim_consecutive`).
+  - Use the thresholded plots to set `skip_initial_frames` directly or to guide `trim_sigma`/`trim_consecutive`.
 - Configuration usage:
 
   ```python

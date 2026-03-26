@@ -19,6 +19,7 @@ def _active_truth_surface() -> list[Path]:
         REPO_ROOT / "src" / "backend" / "TESTING_GUIDE.md",
         REPO_ROOT / "src" / "backend" / "CONTRACTS.md",
         REPO_ROOT / "src" / "backend" / "SEMANTIC_MODEL.md",
+        REPO_ROOT / "src" / "backend" / "docs" / "plume_types.md",
     ]
 
 
@@ -32,6 +33,9 @@ REMOVED_REFERENCES = {
     "make setup-dev": "the Makefile has no setup-dev target",
     "make install-qt": "the Makefile has no install-qt target",
     "make debugger": "the Makefile target is demo-debugger",
+    "local_scripts/emonet_mean_intensity.py": "Emonet helper scripts live under repo-root scripts/",
+    "tests/debugger/test_replay_loader_engine.py": "replay coverage lives in the current debugger test modules",
+    "tests/debugger/test_replay_driver.py": "replay coverage lives in the current debugger test modules",
     "src/backend/plume_nav_sim/envs/base_env.py": "base_env.py was removed",
     "src/backend/plume_nav_sim/core/episode_manager.py": "episode_manager.py was removed",
     "src/plume_nav_sim/envs/plume_search_env.py": "plume_search_env.py was removed",
@@ -48,3 +52,9 @@ def test_active_docs_workflows_and_configs_avoid_known_dead_references():
                 failures.append(f"{path}: found stale reference {needle!r} ({reason})")
 
     assert not failures, "\n".join(failures)
+
+
+def test_backend_tree_has_no_orphan_scenarios_package():
+    assert not (
+        REPO_ROOT / "src" / "backend" / "scenarios"
+    ).exists(), "Keep scenario helpers in active packages/tests, not as an orphan top-level backend package"

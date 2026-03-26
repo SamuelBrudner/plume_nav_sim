@@ -116,7 +116,7 @@ print(info["agent_xy"])  # starting position
   - Some Dryad API endpoints can return `401 Unauthorized` for automated downloads.
   - If auto-download fails, manually download the large frames `.mat` artifact and symlink it into the Data Zoo cache.
   - The Emonet ingest performs background subtraction + auto-trimming of initial baseline frames (configurable in `EmonetSmokeIngest`).
-  - For local analysis (not committed), you can use the helper script `local_scripts/emonet_mean_intensity.py` to compute a background-subtracted mean-intensity trace and estimate smoke onset.
+  - For local analysis, use `scripts/compute_emonet_mean_intensity.py` to write a background-subtracted mean-intensity CSV, then `scripts/plot_emonet_mean_intensity.py` to inspect threshold crossings and choose smoke-onset trimming values.
 
 - Attribution and new-entry workflow (checksums, ingest specs) are documented in `src/backend/docs/plume_types.md`.
 
@@ -256,7 +256,7 @@ Replay configuration (read-only):
 - Loader hard-validates schema_version `1.0.0` and consistent `run_id` across `run.json`, steps, and episodes; multipart shards (`*.partNNNN.jsonl.gz`) are accepted and merged in order.
 - Replay reconstructs the environment from recorded `env_config`, inferring `max_steps` from truncation markers when missing; RGB frames require `enable_rendering=True` in the capture.
 - Replay resolves `action_type` from the run metadata when present; otherwise it infers it from recorded steps and surfaces divergences as explicit errors (see Replay Config).
-- Headless regression coverage lives in `tests/debugger/test_replay_loader_engine.py` (gz/multipart/Parquet loader paths plus ReplayEngine reward/position/done parity and rendering). Qt-driven UI coverage remains in `tests/debugger/test_replay_driver.py` and skips when bindings are absent.
+- Replay regression coverage lives in `tests/debugger/test_replay_navigation.py`, `tests/debugger/test_replay_validation_diff.py`, and `tests/debugger/test_movie_registry_ui.py`; these cover replay navigation, validation-diff surfacing, and replay metadata resolution in the debugger.
 - Version mismatches are treated as hard failures to avoid mixing incompatible capture formats.
 
 Provider Plugins (ODC):
