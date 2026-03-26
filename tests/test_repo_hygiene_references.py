@@ -4,6 +4,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_RUNTIME_PACKAGE = REPO_ROOT / "src" / "backend" / "plume_nav_sim"
+BACKEND_TESTS = REPO_ROOT / "src" / "backend" / "tests"
 
 
 def _active_truth_surface() -> list[Path]:
@@ -58,3 +60,25 @@ def test_backend_tree_has_no_orphan_scenarios_package():
     assert not (
         REPO_ROOT / "src" / "backend" / "scenarios"
     ).exists(), "Keep scenario helpers in active packages/tests, not as an orphan top-level backend package"
+
+
+def test_runtime_package_has_no_test_named_modules():
+    offenders = sorted(
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in BACKEND_RUNTIME_PACKAGE.rglob("test_*.py")
+    )
+    assert not offenders, (
+        "Runtime package modules should not look like pytest test modules: "
+        + ", ".join(offenders)
+    )
+
+
+def test_backend_test_tree_has_no_zero_byte_test_files():
+    offenders = sorted(
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in BACKEND_TESTS.rglob("test_*.py")
+        if path.stat().st_size == 0
+    )
+    assert not offenders, "Delete or implement empty backend tests: " + ", ".join(
+        offenders
+    )

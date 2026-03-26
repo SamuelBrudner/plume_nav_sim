@@ -1,4 +1,4 @@
-"""Lightweight configuration helpers for the trimmed plume_nav_sim test suite."""
+"""Lightweight configuration helpers for tests and smoke scenarios."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def create_edge_case_test_config(**overrides: object) -> Dict[str, object]:
 
 
 @dataclass
-class _TestConfigFactory:
+class ConfigFactory:
     """Simplified stand-in for the production configuration factory."""
 
     auto_optimize: bool = False
@@ -82,5 +82,6 @@ class _TestConfigFactory:
         return builder(**overrides)
 
 
-# Preserve public API while avoiding pytest collection on helper class name
-TestConfigFactory = _TestConfigFactory
+# Preserve the public API name while making the helper explicitly non-collectable.
+ConfigFactory.__test__ = False
+TestConfigFactory = ConfigFactory

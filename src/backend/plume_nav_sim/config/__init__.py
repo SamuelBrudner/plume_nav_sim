@@ -33,7 +33,7 @@ from .registration import (
     register_env,
     unregister_env,
 )
-from .test_configs import (
+from .testing_configs import (
     REPRODUCIBILITY_SEEDS,
     TestConfigFactory,
     create_edge_case_test_config,
