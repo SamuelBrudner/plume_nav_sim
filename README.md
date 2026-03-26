@@ -190,42 +190,34 @@ python -c "import plume_nav_sim as pns; pns.make_env()"
 
 ### Local Lint (mirrors CI)
 
-To reproduce CI’s flake8 checks locally, use the provided Makefile target which runs the exact same options as `.github/workflows/ci-lint.yml`:
+Use the repo’s canonical lint target:
 
 ```bash
-# One-time: create the dev environment with flake8
-make setup-dev ENV_NAME=plume-nav-sim
-
-# Run lint exactly like CI
-make lint ENV_NAME=plume-nav-sim
+make lint
 ```
 
-If you prefer a virtualenv instead of conda, install dev extras and run flake8 directly with the same flags used in CI:
+To mirror the active CI checks directly:
 
 ```bash
-pip install -e src/backend[dev]
-flake8 src/backend/plume_nav_sim \
-  --max-line-length=88 \
-  --extend-ignore=E203,W503,E501 \
-  --select=E,W,F,C,N \
-  --max-complexity=10 \
-  --per-file-ignores="src/backend/plume_nav_sim/__init__.py:F401,F403,F405,src/backend/plume_nav_sim/envs/base_env.py:C901,src/backend/plume_nav_sim/core/episode_manager.py:C901"
+pip install -e "src/backend[lint]"
+python -m ruff check --config src/backend/pyproject.toml src/backend
+python -m mypy --strict --config-file src/backend/mypy.ini --follow-imports=skip -p plume_nav_sim.registration
 ```
 
 ### Debugger (Qt MVP)
 
 A minimal Qt debugger is available for stepping the environment and viewing RGB frames. It includes dockable tools for inspection and configuration (Inspector, Live Config, Replay Config) plus optional frame overlays (purely visual).
 
-- Install Qt toolkit into your conda env:
+- Install the GUI extra:
 
 ```bash
-make install-qt ENV_NAME=plume-nav-sim
+pip install -e "src/backend[gui]"
 ```
 
-- Run the debugger from source (uses `PYTHONPATH=src`):
+- Launch the debugger from the repo root:
 
 ```bash
-make debugger ENV_NAME=plume-nav-sim
+make demo-debugger
 ```
 
 Controls:

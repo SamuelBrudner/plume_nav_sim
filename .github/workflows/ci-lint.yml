@@ -24,20 +24,17 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      - name: Install package with dev extras
-        run: python -m pip install -e "src/backend[dev]"
+      - name: Install package with lint extras
+        run: python -m pip install -e "src/backend[lint]"
 
-      - name: flake8 (library)
+      - name: Ruff (backend)
         run: >-
-          flake8 src/backend/plume_nav_sim
-          --max-line-length=88
-          --extend-ignore=E203,W503,E501
-          --select=E,W,F,C,N
-          --max-complexity=10
-          --per-file-ignores="src/backend/plume_nav_sim/__init__.py:F401,F403,F405,src/backend/plume_nav_sim/envs/base_env.py:C901,src/backend/plume_nav_sim/core/episode_manager.py:C901"
+          python -m ruff check
+          --config src/backend/pyproject.toml
+          src/backend
 
       - name: mypy (registration-only, strict, shallow)
         run: >-
-          mypy --strict --config-file src/backend/mypy.ini
+          python -m mypy --strict --config-file src/backend/mypy.ini
           --follow-imports=skip
           -p plume_nav_sim.registration

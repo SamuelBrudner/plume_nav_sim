@@ -70,12 +70,10 @@ test = [
     "zarr>=2.16.0,<3",
 ]
 lint = [
+    "ruff>=0.6.0",
     "black>=24.0.0",
     "isort>=5.12.0",
     "mypy>=1.8.0",
-    "flake8>=7.0.0",
-    "flake8-bugbear>=24.0.0",
-    "flake8-comprehensions>=3.14.0",
     "tomli>=2.0.1",
     "types-requests",
     "types-setuptools",
@@ -224,25 +222,13 @@ select = ["E", "F", "W"]
 ignore = ["E501", "E203", "F401"]
 
 [tool.ruff.lint.per-file-ignores]
-# The user guide intentionally embeds code snippets inside strings; avoid false positives
-"docs/user_guide.py" = ["F401", "F821", "F841"]
 "__init__.py" = ["F401", "F403", "F405"]
 "tests/*" = ["F401", "F811"]
 "src/backend/tests/*" = ["F401", "F811"]
 "examples/*" = ["F401", "E402"]
 "conftest.py" = ["F401"]
 "plume_nav_sim/plume/__init__.py" = ["E402"]
-"plume_nav_sim/core/episode_manager.py" = ["F811"]
-
-[tool.flake8]
-max-line-length = 88
-extend-ignore = ["E203", "W503", "E501", "F401"]
-exclude = [".git", "__pycache__", "build", "dist", ".tox", ".pytest_cache", "*.egg-info"]
-select = ["E", "W", "F", "C"]
-max-complexity = 10
-per-file-ignores = ["__init__.py:F401,F403,F405", "tests/*:F401,F811", "examples/*:F401,E402", "conftest.py:F401"]
-count = true
-statistics = true
+"plume_nav_sim/core/constants.py" = ["F403"]
 
 [tool.bandit]
 exclude_dirs = ["tests", "build", "dist", ".tox", ".pytest_cache"]

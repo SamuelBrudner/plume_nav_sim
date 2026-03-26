@@ -1,67 +1,37 @@
 # Archived Tests
 
-This directory contains tests that were archived because they test **implementation details** rather than **behavior/contracts**.
+This directory contains tests kept for historical reference after the repo moved away from a larger legacy core and implementation-detail-heavy test style.
 
-## Why Archive Instead of Delete?
+## Current Policy
 
-1. **Historical reference** - Shows what was tested before
-2. **Potential salvage** - Some test logic might be useful later
-3. **Git history** - Preserves the work that went into them
+- Normal backend collection ignores `src/backend/tests/archived`.
+- Directly targeting these files should skip cleanly rather than fail during import.
+- These tests are not part of the supported CI surface.
 
 ## Archived Files
 
-### `test_base_env_implementation_details.py`
-- **Original**: `tests/plume_nav_sim/envs/test_base_env.py` (2,715 lines, 30 tests)
-- **Archived**: 2025-10-10
-- **Reason**: Tested private attributes (`_config`, `_logger`, `_initialized`), error wrapping details, and performance metrics implementation
-- **Replacement**: `tests/plume_nav_sim/envs/test_base_env.py` (347 lines, 15 contract tests)
-- **Coverage**: Core functionality tested by 111 passing integration/API tests
+### Implementation-detail suites (archived 2025-10-10)
+- These exercised private attributes, error-wrapping details, and internal logging structure.
+- The active replacement for base environment behavior is [src/backend/tests/plume_nav_sim/envs/test_base_env.py](/Users/samuelbrudner/Documents/GitHub/plume_nav_sim/src/backend/tests/plume_nav_sim/envs/test_base_env.py).
+- Logging behavior is now covered indirectly by active integration and runner tests rather than dedicated internal-API assertions.
 
-### `test_logging_implementation_details.py`
-- **Original**: `tests/plume_nav_sim/utils/test_logging.py` (26 tests)
-- **Archived**: 2025-10-10
-- **Reason**: Tested internal logging API (`.name` attribute, cache structure, internal methods)
-- **Replacement**: None needed - logging behavior verified by integration tests
-- **Coverage**: All 111 core tests use logging; failures would be caught there
-
-### Legacy Core Monolith Suites (archived 2026-02-06)
+### Legacy core monolith suites (archived 2026-02-06)
 - `test_boundary_enforcer_legacy_core.py`
 - `test_reward_calculator_legacy_core.py`
 - `test_episode_manager_legacy_core.py`
 - `test_config_contracts_legacy_core.py`
-- **Reason**: These suites target removed legacy modules (episode_manager, state_manager, reward_calculator, boundary_enforcer, action_processor) replaced by component-based architecture.
+- These files target removed modules such as `episode_manager`, `state_manager`, `reward_calculator`, and `boundary_enforcer`.
+- Their supported replacements live in the active contract, integration, and unit suites under `src/backend/tests/`.
 
-## Philosophy: Test Behavior, Not Implementation
+## Why Keep Them?
 
-### ❌ Don't Test
-- Private attributes/methods
-- Internal data structures
-- Implementation details that can change
-- Error wrapping/translation layers
-- Cache implementation
+- Historical context for refactors already completed.
+- A source of edge-case scenarios that can be salvaged into behavior tests later.
+- A record of what was intentionally removed from the active surface.
 
-### ✅ Do Test
-- Public API contracts (Gymnasium API compliance)
-- Observable behavior (reset returns obs+info)
-- Error conditions (invalid inputs raise errors)
-- Integration points (components work together)
-- End-to-end workflows
+## What to Use Instead
 
-## When to Restore?
-
-These tests should **not** be restored unless:
-1. Core tests fail to catch a real bug that these would have caught
-2. You need to extract specific test scenarios for behavior testing
-3. You're documenting internal architecture (not for CI)
-
-## Test Status Before Archiving
-
-### test_base_env_implementation_details.py
-- Status: 14/30 passing (47%)
-- Failures: Error type mismatches, private attribute checks
-
-### test_logging_implementation_details.py  
-- Status: 2/26 passing (8%)
-- Failures: Missing `.name` attribute, API changes
-
-Both had low pass rates due to refactoring that **didn't break actual functionality**.
+- Public environment behavior: `src/backend/tests/plume_nav_sim/envs/`
+- Component contracts and invariants: `src/backend/tests/contracts/`
+- Cross-component behavior: `src/backend/tests/integration/`
+- Policy, reward, observation, and runner behavior: `src/backend/tests/unit/` and `src/backend/tests/runner/`

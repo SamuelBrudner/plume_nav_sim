@@ -20,6 +20,13 @@ from .benchmark_data import (
     get_performance_baseline,
     get_scalability_test_data,
 )
+from .test_scenarios import (
+    TestScenario,
+    TestScenarioCollection,
+    get_integration_test_scenarios,
+    get_performance_test_scenarios,
+    get_unit_test_scenarios,
+)
 
 
 # Import configuration example utilities and classes - Version: >=1.0.0
@@ -44,15 +51,6 @@ def get_benchmark_config_examples() -> List[dict]:
 
 ExampleConfigCollection = List[dict]
 ConfigurationCategory = str
-
-# Import test scenario utilities and classes - Version: >=1.0.0
-from .test_scenarios import (
-    TestScenario,
-    TestScenarioCollection,
-    get_integration_test_scenarios,
-    get_performance_test_scenarios,
-    get_unit_test_scenarios,
-)
 
 # Configure module-specific logging
 logger = logging.getLogger(__name__)

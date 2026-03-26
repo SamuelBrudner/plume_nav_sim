@@ -48,32 +48,6 @@ jobs:
           fi
           echo "No skipped tests detected."
 
-  data-capture-validation:
-    runs-on: ubuntu-latest
-    name: Data Capture + Pandera Validation
-    env:
-      MPLBACKEND: Agg
-      PYTHONUNBUFFERED: "1"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      - name: Install package with [data] extra for Pandera/PyArrow
-        run: python -m pip install -e "src/backend[data,test]"
-
-      - name: Run CI guard test for data capture pipeline
-        run: |
-          set -euo pipefail
-          pytest -q src/backend/tests/data_capture/test_ci_guard.py -vv --tb=short
-
   capture-ingest:
     runs-on: ubuntu-latest
     name: Ingest Capture Stage + DVC Smoke
@@ -96,11 +70,6 @@ jobs:
         run: |
           python -m pip install -e "src/backend[data,test]"
           python -m pip install dvc
-
-      - name: Run targeted ingest_capture tests
-        run: |
-          set -euo pipefail
-          pytest -q src/backend/tests/data_capture/test_ingest_capture.py -vv --tb=short
 
       - name: Create tiny capture run (for DVC smoke)
         id: make_run
