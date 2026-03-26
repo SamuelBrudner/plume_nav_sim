@@ -1,6 +1,6 @@
 """Smoke tests for the unified create_environment() helper."""
 
-from plume_nav_sim.envs.compat import create_environment
+from plume_nav_sim.envs import create_environment
 
 
 def test_create_plume_env_via_unified_factory():

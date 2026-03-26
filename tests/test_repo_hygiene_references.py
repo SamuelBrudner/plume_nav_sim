@@ -62,6 +62,12 @@ def test_backend_tree_has_no_orphan_scenarios_package():
     ).exists(), "Keep scenario helpers in active packages/tests, not as an orphan top-level backend package"
 
 
+def test_backend_tree_has_no_envs_compat_module():
+    assert not (
+        REPO_ROOT / "src" / "backend" / "plume_nav_sim" / "envs" / "compat.py"
+    ).exists(), "Keep the env construction surface in plume_nav_sim.envs, not a legacy compat module"
+
+
 def test_runtime_package_has_no_test_named_modules():
     offenders = sorted(
         path.relative_to(REPO_ROOT).as_posix()

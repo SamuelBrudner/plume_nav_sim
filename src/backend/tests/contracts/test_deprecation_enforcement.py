@@ -96,6 +96,11 @@ class TestRemovedParameters:
         with pytest.raises(ModuleNotFoundError):
             import plume_nav_sim.core.boundary_enforcer  # noqa: F401
 
+    def test_envs_compat_module_removed(self):
+        """envs.compat was removed after the shim layer collapse."""
+        with pytest.raises(ModuleNotFoundError):
+            import plume_nav_sim.envs.compat  # noqa: F401
+
 
 class TestDeprecatedAPIsDocumented:
     """Verify all deprecated APIs in CONTRACTS.md are actually deprecated."""
