@@ -93,7 +93,7 @@ def create_component_environment(  # noqa: C901
     plume_sigma: float = 20.0,
     step_size: int = 1,
     render_mode: Optional[str] = None,
-    warn_deprecated: bool = True,
+    warn_deprecated: bool = False,
     # New: select plume source and optional movie configuration
     plume: Literal["static", "movie"] = "static",
     movie_path: Optional[str] = None,

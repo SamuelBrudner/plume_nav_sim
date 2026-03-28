@@ -4,13 +4,14 @@ from typing import Iterator, List
 
 import numpy as np
 
-import plume_nav_sim as pns
+from plume_nav_sim.envs import create_component_environment
 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
 
 
 def _make_env(rgb: bool = False):
-    return pns.make_env(
+    return create_component_environment(
         grid_size=(16, 16),
+        goal_location=(8, 8),
         action_type="oriented",
         observation_type="concentration",
         reward_type="step_penalty",

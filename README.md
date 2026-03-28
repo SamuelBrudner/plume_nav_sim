@@ -75,10 +75,20 @@ print(info["agent_xy"])  # starting position
   ensure_registered()  # make ENV_ID available to gym.make()
 
   import gymnasium as gym
-  env = gym.make(ENV_ID, action_type="oriented")
+  env = gym.make(ENV_ID)
   ```
 
-- **Component knobs**: pass string options such as `action_type="run_tumble"` or `observation_type="antennae"`
+- **Component knobs**: use the explicit component factory for `action_type`, `observation_type`, `reward_type`, wind, or movie-plume options:
+
+  ```python
+  from plume_nav_sim.envs import create_component_environment
+
+  env = create_component_environment(
+      action_type="run_tumble",
+      observation_type="antennae",
+      reward_type="step_penalty",
+  )
+  ```
 - **Wind sensing (optional)**: request `observation_type="wind_vector"` and either set `enable_wind=True` or pass `wind_direction_deg`/`wind_speed`/`wind_vector`; omit to keep odor-only behavior unchanged.
 - **See also**: `src/backend/examples/quickstart.py` (writes `quickstart.gif` by default)
 

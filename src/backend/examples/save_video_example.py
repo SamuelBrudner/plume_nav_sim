@@ -6,12 +6,12 @@ Requires media extras:
 - From source (repo): pip install -e ".[media]"
 """
 
-import plume_nav_sim as pns
+from plume_nav_sim.envs import create_component_environment
 from plume_nav_sim.runner import runner
 from plume_nav_sim.utils.video import save_video
 
 # Create environment with rgb_array rendering
-env = pns.make_env(
+env = create_component_environment(
     grid_size=(64, 64),
     max_steps=50,
     render_mode="rgb_array",

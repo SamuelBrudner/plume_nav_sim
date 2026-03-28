@@ -8,8 +8,8 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
-import plume_nav_sim as pns
 from plume_nav_sim._compat import is_space_subset
+from plume_nav_sim.envs import create_component_environment
 
 # ===== Specs =====
 
@@ -56,7 +56,8 @@ class PolicySpec(BaseModel):
 class SimulationSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # Environment parameters (subset; defaults are taken from make_env if None)
+    # Environment parameters (subset; defaults are taken from the component factory
+    # when omitted)
     grid_size: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
     source_location: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
     start_location: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
@@ -211,10 +212,10 @@ def _add_if_not_none(
     kwargs[key] = transform(value) if transform is not None else value
 
 
-def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
+def _build_component_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
     kwargs: dict[str, Any] = {}
     _add_if_not_none(kwargs, "grid_size", spec.grid_size, tuple)
-    _add_if_not_none(kwargs, "source_location", spec.source_location, tuple)
+    _add_if_not_none(kwargs, "goal_location", spec.source_location, tuple)
     _add_if_not_none(kwargs, "start_location", spec.start_location, tuple)
     _add_if_not_none(kwargs, "goal_radius", spec.goal_radius, float)
     _add_if_not_none(kwargs, "max_steps", spec.max_steps, int)
@@ -222,10 +223,8 @@ def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
     _add_if_not_none(kwargs, "observation_type", spec.observation_type)
     _add_if_not_none(kwargs, "reward_type", spec.reward_type)
 
-    # Plume configuration: SimulationSpec exposes plume_sigma directly,
-    # while make_env compatibility routing consumes plume_params.sigma.
     if spec.plume_sigma is not None:
-        kwargs["plume_params"] = {"sigma": float(spec.plume_sigma)}
+        kwargs["plume_sigma"] = float(spec.plume_sigma)
 
     _add_if_not_none(kwargs, "plume", spec.plume)
     _add_if_not_none(kwargs, "movie_path", spec.movie_path)
@@ -263,8 +262,9 @@ def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
 
 
 def build_env(spec: SimulationSpec):
-    kwargs = _build_env_kwargs_from_spec(spec)
-    return pns.make_env(**kwargs)
+    kwargs = _build_component_env_kwargs_from_spec(spec)
+    kwargs["warn_deprecated"] = False
+    return create_component_environment(**kwargs)
 
 
 def _make_random_sampler(env) -> Any:

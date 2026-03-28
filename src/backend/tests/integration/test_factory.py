@@ -5,6 +5,7 @@ Tests that the factory correctly assembles environments from components
 with various configuration options.
 """
 
+import warnings
 import numpy as np
 import pytest
 from pathlib import Path
@@ -16,6 +17,21 @@ from plume_nav_sim.envs.factory import create_component_environment
 
 class TestComponentEnvironmentFactory:
     """Tests for create_component_environment factory."""
+
+    def test_factory_suppresses_component_deprecation_warning_by_default(self):
+        """Factory is the supported surface, so it should be quiet by default."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            env = create_component_environment()
+
+        try:
+            assert not [
+                warning
+                for warning in caught
+                if issubclass(warning.category, DeprecationWarning)
+            ]
+        finally:
+            env.close()
 
     def test_default_configuration(self):
         """Test: Factory creates environment with defaults."""

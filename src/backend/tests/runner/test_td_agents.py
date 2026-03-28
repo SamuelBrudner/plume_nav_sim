@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import plume_nav_sim as pns
+from plume_nav_sim.envs import create_component_environment
 from plume_nav_sim.policies import (
     TemporalDerivativeDeterministicPolicy,
     TemporalDerivativePolicy,
@@ -22,9 +22,9 @@ from plume_nav_sim.runner import runner as r
 
 
 def _env(*, rgb: bool = False, action_type: str = "oriented"):
-    return pns.make_env(
+    return create_component_environment(
         grid_size=(32, 32),
-        source_location=(24, 24),
+        goal_location=(24, 24),
         start_location=(4, 28),
         max_steps=200,
         render_mode=("rgb_array" if rgb else None),
