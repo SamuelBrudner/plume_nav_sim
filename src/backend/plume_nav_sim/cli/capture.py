@@ -369,6 +369,7 @@ def _base_component_env_kwargs(
         "observation_type": env_cfg.get("observation_type", "concentration"),
         "reward_type": env_cfg.get("reward_type", "step_penalty"),
     }
+    _set_if_not_none(kwargs, "goal_radius", env_cfg.get("goal_radius"))
     _set_if_not_none(kwargs, "max_steps", env_cfg.get("max_steps", None) or None)
     return kwargs
 

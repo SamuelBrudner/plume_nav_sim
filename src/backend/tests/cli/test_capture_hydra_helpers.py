@@ -74,6 +74,19 @@ def _fail_make_env(**kwargs):
     raise AssertionError(f"capture should not call pns.make_env: {kwargs}")
 
 
+def test_base_component_env_kwargs_wires_goal_radius_and_ignores_render() -> None:
+    kwargs = capture._base_component_env_kwargs(
+        {
+            "goal_radius": 3.5,
+            "render": True,
+        }
+    )
+
+    assert kwargs["goal_radius"] == 3.5
+    assert "render" not in kwargs
+    assert "render_mode" not in kwargs
+
+
 def test_env_from_cfg_static_uses_component_factory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -90,6 +103,7 @@ def test_env_from_cfg_static_uses_component_factory(
         {
             "env": {
                 "grid_size": [32, 24],
+                "goal_radius": 4.5,
                 "action_type": "run_tumble",
                 "observation_type": "antennae",
                 "reward_type": "sparse",
@@ -102,6 +116,7 @@ def test_env_from_cfg_static_uses_component_factory(
     assert (width, height) == (32, 24)
     assert seen["kwargs"] == {
         "grid_size": (32, 24),
+        "goal_radius": 4.5,
         "action_type": "run_tumble",
         "observation_type": "antennae",
         "reward_type": "sparse",
