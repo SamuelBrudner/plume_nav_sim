@@ -566,7 +566,11 @@ def _run_capture(
         args.output, experiment=args.experiment, rotate_size_bytes=args.rotate_size
     )
     cfg = _capture_env_config(env, default_grid=(w, h))
+    base_seed = int(args.seed)
+    episodes = int(args.episodes)
     meta_overrides: dict[str, object] = {}
+    meta_overrides["base_seed"] = base_seed
+    meta_overrides["episode_seeds"] = [base_seed + i for i in range(episodes)]
     if cfg_hash:
         meta_overrides["config_hash"] = cfg_hash
     if isinstance(capture_cfg, dict):
@@ -585,8 +589,6 @@ def _run_capture(
         meta_overrides=(meta_overrides or None),
     )
 
-    base_seed = int(args.seed)
-    episodes = int(args.episodes)
     for i in range(episodes):
         seed = base_seed + i
         wrapped.reset(seed=seed)

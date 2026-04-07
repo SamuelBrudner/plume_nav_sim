@@ -19,7 +19,9 @@ class RunMeta:
     start_time: str
     env_config: dict
     base_seed: Optional[int] = None
+    episode_seeds: Optional[list[int]] = None
     package_version: Optional[str] = None
+    config_hash: Optional[str] = None
     git_sha: Optional[str] = None
     system: Optional[dict] = None
     extra: Optional[dict] = None

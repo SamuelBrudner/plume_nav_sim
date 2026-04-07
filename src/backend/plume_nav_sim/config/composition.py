@@ -6,7 +6,14 @@ from importlib import import_module
 from types import ModuleType
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeInt,
+    PositiveInt,
+    field_validator,
+)
 
 from plume_nav_sim._compat import is_space_subset
 from plume_nav_sim.envs import create_component_environment
@@ -59,8 +66,12 @@ class SimulationSpec(BaseModel):
     # Environment parameters (subset; defaults are taken from the component factory
     # when omitted)
     grid_size: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
-    source_location: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
-    start_location: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
+    source_location: Optional[Tuple[NonNegativeInt, NonNegativeInt]] = Field(
+        default=None
+    )
+    start_location: Optional[Tuple[NonNegativeInt, NonNegativeInt]] = Field(
+        default=None
+    )
     goal_radius: Optional[float] = Field(default=None, ge=0.0)
     plume_sigma: Optional[float] = Field(default=None, ge=0.0)
     max_steps: Optional[PositiveInt] = Field(default=None)

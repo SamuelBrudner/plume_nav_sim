@@ -39,9 +39,10 @@ Current expectations:
 - `step()` returns `(observation, reward, terminated, truncated, info)`.
 - `step()` before `reset()` raises `StateError`.
 - Invalid public inputs raise `ValidationError` rather than failing silently.
+- Explicit out-of-bounds user coordinates are rejected rather than clamped or recentered.
 - Reusing the same seed should produce deterministic behavior for equivalent configuration and policy inputs.
 
-`create_component_environment()` remains supported for the component-based and compatibility surface. It accepts the currently documented `action_type`, `observation_type`, `reward_type`, and movie-plume configuration options. Deprecated compatibility routing still exists through `make_env(...)` for legacy kwargs, but the preferred stable surface is explicit factory usage.
+`create_component_environment()` remains supported for the component-based and compatibility surface. It accepts the currently documented `action_type`, `observation_type`, `reward_type`, and movie-plume configuration options. Deprecated compatibility routing still exists through `make_env(...)` for legacy kwargs, but the preferred stable surface is explicit factory usage. The default and compatibility-routed envs share the same common public info keys (`step_count`, `episode_count`, `total_reward`, `goal_reached`, `agent_xy`, `goal_location`, `source_location`).
 
 ## Error Contract
 

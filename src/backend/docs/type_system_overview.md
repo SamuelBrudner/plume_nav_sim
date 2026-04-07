@@ -16,7 +16,7 @@ how to use them consistently across the codebase.
 Core types are defined in `src/backend/plume_nav_sim/core/types.py`.
 
 ## Usage Examples
-Create validated coordinates and grid sizes:
+Create normalized coordinates and grid sizes:
 
 ```python
 from plume_nav_sim.core.types import create_coordinates, create_grid_size
@@ -61,8 +61,11 @@ dx, dy = get_movement_vector(action)
 ```
 
 ## Error Model
-- All validation routes through the shared `ValidationError` in
-  `plume_nav_sim._compat`.
+- Core dataclasses are intentionally lightweight containers.
+- Public validation routes through the shared `ValidationError` in
+  `plume_nav_sim._compat`, plus public config/environment constructors.
+- Use `validate_coordinates(...)`, `validate_grid_size(...)`, `SimulationSpec`,
+  and the env factories when you need external-input validation.
 
 ## Tests and Contracts
 - Contract tests exercise invariants for these types in
@@ -72,3 +75,5 @@ dx, dy = get_movement_vector(action)
 ## Migration Notes
 - Core types are consolidated under `core.types` with a minimal surface area.
 - Environment configuration is now in `plume_nav_sim.envs.config_types`.
+- `EnvironmentConfig.to_dict()` emits JSON-safe primitives so capture/replay
+  metadata does not contain raw dataclass objects.

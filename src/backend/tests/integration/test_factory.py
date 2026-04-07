@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from pathlib import Path
 
+from plume_nav_sim._compat import ValidationError
 from plume_nav_sim.data_zoo.download import DatasetDownloadError
 from plume_nav_sim.envs import factory as env_factory
 from plume_nav_sim.envs.factory import create_component_environment
@@ -184,6 +185,14 @@ class TestComponentEnvironmentFactory:
         """Test: Factory raises error for invalid reward_type."""
         with pytest.raises(ValueError, match="Invalid reward_type"):
             create_component_environment(reward_type="dense")  # 'dense' not supported
+
+    def test_explicit_out_of_bounds_goal_location_raises_validation_error(self):
+        with pytest.raises(ValidationError, match="coordinates outside grid bounds"):
+            create_component_environment(grid_size=(8, 8), goal_location=(99, 99))
+
+    def test_explicit_out_of_bounds_start_location_raises_validation_error(self):
+        with pytest.raises(ValidationError, match="coordinates outside grid bounds"):
+            create_component_environment(grid_size=(8, 8), start_location=(99, 99))
 
     def test_full_episode_execution(self):
         """Test: Factory environment can execute full episode."""

@@ -9,6 +9,7 @@ except ImportError:
 
 import numpy as np
 
+from .._compat import ValidationError, validate_coordinates, validate_grid_size
 from ..actions import DiscreteGridActions, OrientedGridActions
 from ..actions.oriented_run_tumble import OrientedRunTumbleActions
 from ..constants import DEFAULT_SOURCE_LOCATION
@@ -81,7 +82,7 @@ def _source_location_px_from_dataset_dir(dataset_path: Path) -> tuple[int, int] 
 def create_component_environment(  # noqa: C901
     *,
     grid_size: Union[tuple[int, int], GridSize] = (128, 128),
-    goal_location: Union[tuple[int, int], Coordinates] = (64, 64),
+    goal_location: Optional[Union[tuple[int, int], Coordinates]] = None,
     start_location: Optional[Union[tuple[int, int], Coordinates]] = None,
     max_steps: int = 1000,
     goal_radius: float = 5.0,
@@ -116,30 +117,29 @@ def create_component_environment(  # noqa: C901
     wind_noise_std: float = 0.0,
 ) -> ComponentBasedEnvironment:
     # Convert tuples to proper types
-    if isinstance(grid_size, tuple):
-        grid_size = GridSize(width=grid_size[0], height=grid_size[1])
-
-    if isinstance(goal_location, tuple):
-        goal_location = Coordinates(x=goal_location[0], y=goal_location[1])
-
-    if start_location and isinstance(start_location, tuple):
-        start_location = Coordinates(x=start_location[0], y=start_location[1])
+    grid_size = validate_grid_size(grid_size)
+    goal_location_was_implicit = goal_location is None
+    goal_value = DEFAULT_SOURCE_LOCATION if goal_location is None else goal_location
+    goal_location = (
+        validate_coordinates(goal_value, grid_size)
+        if not goal_location_was_implicit
+        else Coordinates(x=int(goal_value[0]), y=int(goal_value[1]))
+    )
+    if start_location is not None:
+        start_location = validate_coordinates(start_location, grid_size)
 
     if goal_radius < 0:
         raise ValueError("goal_radius must be non-negative")
     if goal_radius == 0:
         goal_radius = float(np.finfo(np.float32).eps)
 
-    goal_location_is_default = (
-        goal_location.x,
-        goal_location.y,
-    ) == DEFAULT_SOURCE_LOCATION
+    goal_location_is_default = goal_location_was_implicit
 
-    # Clamp goal_location to grid bounds if default is outside smaller grid
-    if goal_location.x >= grid_size.width or goal_location.y >= grid_size.height:
+    # Preserve the long-standing small-grid fallback only for the implicit default.
+    if goal_location_is_default and not grid_size.contains(goal_location):
         goal_location = Coordinates(
-            x=min(goal_location.x, grid_size.width - 1),
-            y=min(goal_location.y, grid_size.height - 1),
+            x=min(max(goal_location.x, 0), grid_size.width - 1),
+            y=min(max(goal_location.y, 0), grid_size.height - 1),
         )
 
     # Create action processor

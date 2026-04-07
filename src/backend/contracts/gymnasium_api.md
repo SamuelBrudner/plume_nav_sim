@@ -83,12 +83,12 @@ Recommended stable keys (present in both `reset()` and `step()`):
 - `total_reward: float`
 - `goal_reached: bool`
 - `agent_xy: tuple[int, int]` (agent position)
+- `goal_location: tuple[int, int]`
+- `source_location: tuple[int, int]`
 
 Common keys returned by `reset()`:
 
 - `seed: int | None`
-- `goal_location: tuple[int, int]` (same as `source_location` in the default env)
-- `source_location: tuple[int, int]`
 
 Common keys returned by `step()`:
 

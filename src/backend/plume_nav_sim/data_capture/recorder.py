@@ -9,7 +9,7 @@ import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .schemas import EpisodeRecord, RunMeta, StepRecord
 
@@ -99,8 +99,38 @@ class RunRecorder:
     def append_episode(self, rec: EpisodeRecord) -> None:
         self._episodes.write_obj(asdict(rec))
 
+    def _jsonl_paths(self, stem: str) -> list[Path]:
+        base = self.root / f"{stem}.jsonl.gz"
+        parts = sorted(self.root.glob(f"{stem}.part*.jsonl.gz"))
+        paths: list[Path] = []
+        if base.exists():
+            paths.append(base)
+        paths.extend(parts)
+        return paths
+
+    def _export_parquet(self) -> None:
+        try:
+            import pyarrow as pa  # type: ignore
+            import pyarrow.parquet as pq  # type: ignore
+        except Exception:
+            return
+
+        for stem in ("steps", "episodes"):
+            rows: list[dict[str, Any]] = []
+            for path in self._jsonl_paths(stem):
+                with gzip.open(path, "rt", encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        rows.append(json.loads(line))
+            if not rows:
+                continue
+            table = pa.Table.from_pylist(rows)
+            pq.write_table(table, self.root / f"{stem}.parquet")
+
     def finalize(self, export_parquet: bool = False) -> None:
-        if export_parquet:
-            raise ValueError("Parquet export is no longer supported in data_capture")
         self._steps.close()
         self._episodes.close()
+        if export_parquet:
+            self._export_parquet()

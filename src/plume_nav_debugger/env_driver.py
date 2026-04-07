@@ -205,9 +205,73 @@ class EnvDriver(QtCore.QObject):
     def _clear_history(self) -> None:
         self._action_history = []
 
+    def _seed_for_metadata(self, seed: Optional[int]) -> int:
+        return -1 if seed is None else int(seed)
+
+    def _stream_policy(self) -> Any:
+        if self._controller is not None:
+            return self._controller
+        if self._policy is not None:
+            return self._policy
+        return self._make_default_policy()
+
+    def _reset_control_state(self, seed: Optional[int], *, context: str) -> None:
+        try:
+            if self._controller is not None and hasattr(self._controller, "reset"):
+                self._controller.reset(seed=seed)  # type: ignore[attr-defined]
+            elif self._policy is not None and hasattr(self._policy, "reset"):
+                self._policy.reset(seed=seed)  # type: ignore[attr-defined]
+        except Exception as exc:
+            logger.warning("%s: controller/policy reset failed: %s", context, exc, exc_info=True)
+
+    def _prepare_preview_reset(self, seed: Optional[int], *, error_message: str) -> bool:
+        if self._env is None:
+            self._iter = None
+            self._last_event = None
+            logger.error("%s: environment is not initialized", error_message)
+            self.error_occurred.emit(f"{error_message}: environment is not initialized")
+            return False
+
+        self._reset_control_state(seed, context=error_message)
+
+        try:
+            _obs0, _info0 = self._env.reset(seed=seed)
+            self._update_start_from_info(self._seed_for_metadata(seed), _info0)
+            return True
+        except Exception as exc:
+            self.pause()
+            self._iter = None
+            self._last_event = None
+            logger.error("%s: %s", error_message, exc, exc_info=True)
+            self.error_occurred.emit(f"{error_message}: {exc}")
+            return False
+
+    def _start_stream(self, seed: Optional[int], *, error_message: str) -> bool:
+        if self._env is None:
+            self._iter = None
+            logger.error("%s: environment is not initialized", error_message)
+            self.error_occurred.emit(f"{error_message}: environment is not initialized")
+            return False
+
+        from plume_nav_sim.runner import runner
+
+        try:
+            self._iter = runner.stream(
+                self._env,
+                self._stream_policy(),
+                seed=seed,
+                render=True,
+            )
+            return True
+        except Exception as exc:
+            self.pause()
+            self._iter = None
+            logger.error("%s: %s", error_message, exc, exc_info=True)
+            self.error_occurred.emit(f"{error_message}: {exc}")
+            return False
+
     def initialize(self) -> None:
         import plume_nav_sim as pns
-        from plume_nav_sim.runner import runner
 
         from .controllable_policy import ControllablePolicy
 
@@ -296,27 +360,21 @@ class EnvDriver(QtCore.QObject):
         self._episode_seed = self.config.seed
 
         # Eagerly reset env and controller so we can show the initial frame
-        try:
-            try:
-                self._controller.reset(seed=self._episode_seed)  # type: ignore[attr-defined]
-            except Exception:
-                logger.debug("Controller reset failed (non-fatal)", exc_info=True)
-            _obs0, _info0 = self._env.reset(seed=self._episode_seed)
-            self._update_start_from_info(self._episode_seed or -1, _info0)
-        except Exception as exc:
-            logger.error("Environment reset failed during init: %s", exc, exc_info=True)
-            self.error_occurred.emit(f"Env reset failed: {exc}")
+        if not self._prepare_preview_reset(
+            self._episode_seed,
+            error_message="Env reset failed",
+        ):
+            return
 
         # Emit an initial frame (pre-step) for immediate visual feedback
         self._emit_frame_now()
 
         # Prime generator for stepping using runner.stream (will reset again with same seed)
-        self._iter = runner.stream(
-            self._env,
-            self._controller if self._controller is not None else self._policy,
-            seed=self._episode_seed,
-            render=True,
-        )
+        if not self._start_stream(
+            self._episode_seed,
+            error_message="Runner stream init failed",
+        ):
+            return
         # Build ProviderMux and announce action names after env/policy ready
         try:
             from plume_nav_debugger.odc.mux import ProviderMux
@@ -433,8 +491,6 @@ class EnvDriver(QtCore.QObject):
     def reset(self, seed: Optional[int] = None) -> None:
         if self._env is None:
             return
-        # Recreate the stream iterator with a fresh seed
-        from plume_nav_sim.runner import runner
 
         # Choose seed: use provided, else last episode seed, else config
         eff_seed = (
@@ -461,34 +517,21 @@ class EnvDriver(QtCore.QObject):
         self._apply_explore_override()
 
         # Eagerly reset env and controller before building stream so the frame shows start state
-        try:
-            try:
-                if self._controller is not None and hasattr(self._controller, "reset"):
-                    self._controller.reset(seed=eff_seed)  # type: ignore[attr-defined]
-                elif self._policy is not None and hasattr(self._policy, "reset"):
-                    self._policy.reset(seed=eff_seed)  # type: ignore[attr-defined]
-            except Exception:
-                logger.debug("Controller/policy reset failed (non-fatal)", exc_info=True)
-            _obs0, _info0 = self._env.reset(seed=eff_seed)
-            self._update_start_from_info(eff_seed or -1, _info0)
-        except Exception as exc:
-            logger.error("Environment reset failed: %s", exc, exc_info=True)
-            self.error_occurred.emit(f"Reset failed: {exc}")
+        if not self._prepare_preview_reset(
+            eff_seed,
+            error_message="Reset failed",
+        ):
+            return
 
         # Show first frame after reset
         self._emit_frame_now()
 
         # Build fresh stream (will reset again with same seed, preserving determinism)
-        self._iter = runner.stream(
-            self._env,
-            (
-                (self._controller if self._controller is not None else self._policy)
-                if self._policy is not None
-                else self._make_default_policy()
-            ),
-            seed=eff_seed,
-            render=True,
-        )
+        if not self._start_stream(
+            eff_seed,
+            error_message="Runner stream reset failed",
+        ):
+            return
         # Announce action space after reset (safe no-op for same env)
         self._emit_action_space_changed()
 
@@ -631,7 +674,6 @@ class EnvDriver(QtCore.QObject):
 
     def _recreate_env(self, start_location: Optional[tuple[int, int]]) -> None:
         import plume_nav_sim as pns
-        from plume_nav_sim.runner import runner
 
         # Close old env if present
         try:
@@ -716,32 +758,19 @@ class EnvDriver(QtCore.QObject):
         eff_seed = (
             self._episode_seed if self._episode_seed is not None else self.config.seed
         )
-        try:
-            try:
-                if self._controller is not None and hasattr(self._controller, "reset"):
-                    self._controller.reset(seed=eff_seed)  # type: ignore[attr-defined]
-                elif self._policy is not None and hasattr(self._policy, "reset"):
-                    self._policy.reset(seed=eff_seed)  # type: ignore[attr-defined]
-            except Exception:
-                logger.debug("Controller/policy reset failed during recreation", exc_info=True)
-            _obs0, _info0 = self._env.reset(seed=eff_seed)
-            self._update_start_from_info(eff_seed or -1, _info0)
-        except Exception as exc:
-            logger.error("Environment reset failed during recreation: %s", exc, exc_info=True)
-            self.error_occurred.emit(f"Reset failed after env recreation: {exc}")
+        if not self._prepare_preview_reset(
+            eff_seed,
+            error_message="Reset failed after env recreation",
+        ):
+            return
 
         # Emit first frame and rebuild stream
         self._emit_frame_now()
-        self._iter = runner.stream(
-            self._env,
-            (
-                (self._controller if self._controller is not None else self._policy)
-                if self._policy is not None
-                else self._make_default_policy()
-            ),
-            seed=eff_seed,
-            render=True,
-        )
+        if not self._start_stream(
+            eff_seed,
+            error_message="Runner stream recreation failed",
+        ):
+            return
         # Rebuild ProviderMux and emit names
         try:
             from plume_nav_debugger.odc.mux import ProviderMux

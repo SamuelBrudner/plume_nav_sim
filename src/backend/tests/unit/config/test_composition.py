@@ -56,3 +56,25 @@ def test_build_env_suppresses_component_deprecation_warning() -> None:
         assert dep_messages == []
     finally:
         env.close()
+
+
+def test_simulation_spec_accepts_zero_based_coordinates() -> None:
+    env = build_env(
+        SimulationSpec(
+            grid_size=(16, 16),
+            source_location=(0, 0),
+            start_location=(0, 0),
+            max_steps=5,
+            render=False,
+        )
+    )
+
+    try:
+        obs, info = env.reset(seed=0)
+
+        assert obs is not None
+        assert env.goal_location.x == 0
+        assert env.goal_location.y == 0
+        assert info["agent_position"] == (0, 0)
+    finally:
+        env.close()

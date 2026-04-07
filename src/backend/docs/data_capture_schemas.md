@@ -1,8 +1,8 @@
-# Data Capture Schemas (v1.0.0)
+# Data Capture Schemas (v0.1)
 
 This document defines the analysis‑ready data formats written by the plume_nav_sim data capture pipeline.
 
-Status: stable. Schema version: 1.0.0
+Status: active. Schema version: 0.1
 
 The capture pipeline writes three primary artifacts in `results/<experiment>/<run_id>/`:
 
@@ -16,13 +16,14 @@ Optionally, Parquet files can be exported either via the CLI (`--parquet`) or pr
 
 Top‑level fields:
 
-- `schema_version` (string, required): must equal `"1.0.0"`
+- `schema_version` (string, required): must equal `"0.1"`
 - `run_id` (string, required)
 - `experiment` (string, optional)
 - `package_version` (string, optional)
+- `config_hash` (string, optional)
 - `git_sha` (string, optional)
 - `start_time` (string, ISO‑8601 UTC)
-- `env_config` (object, required): serialized EnvironmentConfig
+- `env_config` (object, required): JSON-safe serialized `EnvironmentConfig`
   - `grid_size`: [width, height]
   - `source_location`: [x, y]
   - `max_steps`: int
@@ -31,6 +32,7 @@ Top‑level fields:
   - `plume_params`: { `source_location`: [x, y], `sigma`: float }
 - `base_seed` (int, optional)
 - `episode_seeds` (array[int], optional)
+- `extra` (object, optional)
 - `system` (object, required; empty values allowed):
   - `hostname`: string|null
   - `platform`: string|null (e.g., `macOS-14.5-arm64-arm-64bit`)
@@ -42,10 +44,11 @@ Example:
 
 ```
 {
-  "schema_version": "1.0.0",
+  "schema_version": "0.1",
   "run_id": "run-20250101-120000",
   "experiment": "demo",
   "package_version": "0.0.1",
+  "config_hash": "abc123",
   "git_sha": "abc1234",
   "start_time": "2025-01-01T12:00:00Z",
   "env_config": {
@@ -74,7 +77,6 @@ Each line is a JSON object describing one environment step.
 
 Fields:
 
-- `schema_version` (string, required): `"1.0.0"`
 - `ts` (float, seconds since epoch)
 - `run_id` (string)
 - `episode_id` (string)
@@ -91,7 +93,7 @@ Fields:
 Example line:
 
 ```
-{"schema_version":"1.0.0","ts":1735728000.0,"run_id":"run-20250101-120000","episode_id":"ep-000001","step":1,"action":0,"reward":0.0,"terminated":false,"truncated":false,"agent_position":{"x":16,"y":16},"distance_to_goal":22.6,"observation_summary":[0.12],"seed":123}
+{"ts":1735728000.0,"run_id":"run-20250101-120000","episode_id":"ep-000001","step":1,"action":0,"reward":0.0,"terminated":false,"truncated":false,"agent_position":{"x":16,"y":16},"distance_to_goal":22.6,"observation_summary":[0.12],"seed":123}
 ```
 
 ## 3) episodes.jsonl.gz
@@ -100,7 +102,6 @@ Each line summarizes a completed episode.
 
 Fields:
 
-- `schema_version` (string, required): `"1.0.0"`
 - `run_id` (string)
 - `episode_id` (string)
 - `terminated` (bool)
@@ -115,7 +116,7 @@ Fields:
 Example line:
 
 ```
-{"schema_version":"1.0.0","run_id":"run-20250101-120000","episode_id":"ep-000001","terminated":true,"truncated":false,"total_steps":42,"total_reward":1.0,"final_position":{"x":48,"y":48},"final_distance_to_goal":0.0,"duration_ms":830.2,"avg_step_time_ms":19.8}
+{"run_id":"run-20250101-120000","episode_id":"ep-000001","terminated":true,"truncated":false,"total_steps":42,"total_reward":1.0,"final_position":{"x":48,"y":48},"final_distance_to_goal":0.0,"duration_ms":830.2,"avg_step_time_ms":19.8}
 ```
 
 ## Validation
@@ -126,6 +127,7 @@ Example line:
 ## Parquet Export
 
 - End‑of‑run export to single Parquet files is available via `RunRecorder.finalize(export_parquet=True)` or CLI `--parquet`.
+- Parquet export is best-effort and requires `pyarrow`; when it is unavailable the JSON artifacts are still written.
 - For very large runs, a partitioned Parquet layout (per‑episode files) can be added in future iterations.
 
 ## Performance & Storage

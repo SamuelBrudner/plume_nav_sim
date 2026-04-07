@@ -83,23 +83,21 @@ class DataCaptureWrapper(gym.Wrapper):
             env_config=cfg_payload,
             package_version=_get_package_version(),
         )
+        cfg = meta.to_dict()
+        extra: dict[str, Any] = dict(cfg.get("extra") or {})
         if meta_overrides:
-            cfg = meta.to_dict()
-            extra: dict[str, Any] = {}
             for key, value in meta_overrides.items():
-                if key in cfg:
+                if key == "extra" and isinstance(value, dict):
+                    extra.update(value)
+                elif key in cfg and key != "extra":
                     cfg[key] = value
                 else:
                     extra[key] = value
-            if extra:
-                cfg["extra"] = extra
-            meta = RunMeta(**cfg)
-
         sim_meta = _build_simulation_metadata(cfg_payload, meta_overrides)
         if sim_meta is not None:
-            cfg2 = meta.to_dict()
-            cfg2.setdefault("extra", {})["simulation_metadata"] = sim_meta
-            meta = RunMeta(**cfg2)
+            extra["simulation_metadata"] = sim_meta
+        cfg["extra"] = extra or None
+        meta = RunMeta(**cfg)
 
         self.recorder.write_run_meta(meta)
 

@@ -11,15 +11,16 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from plume_nav_sim._compat import ValidationError
+from plume_nav_sim._compat import ValidationError, validate_grid_size
+from plume_nav_sim.constants import MAX_GRID_SIZE
 from plume_nav_sim.core.types import Coordinates, GridSize
 
 # ============================================================================
 # Hypothesis Strategies
 # ============================================================================
 
-# Note: Current implementation rejects negative coordinates
-# We'll test both positive and (when fixed) negative coordinates
+# Keep the distance-property strategies in-bounds and positive to avoid
+# conflating mathematical checks with environment-boundary validation.
 positive_coordinates = st.builds(
     Coordinates, x=st.integers(0, 1000), y=st.integers(0, 1000)
 )
@@ -205,32 +206,28 @@ class TestCoordinatesImmutability:
 
 
 class TestGridSizeValidation:
-    """Test GridSize validation invariants.
+    """Test GridSize/public-boundary validation semantics.
 
     Contract: core_types.md
-    Invariants I1-I4: width, height must be positive and bounded.
+    GridSize is a lightweight container; public validators enforce invariants.
     """
 
-    @pytest.mark.skip(reason="Validation removed in core types simplification")
-    def test_grid_size_requires_positive_dimensions(self):
-        """Cannot create GridSize with zero or negative dimensions.
+    def test_grid_size_core_type_remains_lightweight(self):
+        """GridSize stores raw dimensions without constructor validation.
 
-        Contract: core_types.md - Invariants I1, I2
-        width > 0, height > 0
+        Contract: core_types.md
+        Positivity is enforced at public boundaries, not in the dataclass.
         """
-        # Zero dimensions
-        with pytest.raises((ValidationError, ValueError)):
-            GridSize(width=0, height=10)
+        grid = GridSize(width=0, height=-5)
 
-        with pytest.raises((ValidationError, ValueError)):
-            GridSize(width=10, height=0)
+        assert grid.width == 0
+        assert grid.height == -5
 
-        # Negative dimensions
-        with pytest.raises((ValidationError, ValueError)):
-            GridSize(width=-5, height=10)
-
-        with pytest.raises((ValidationError, ValueError)):
-            GridSize(width=10, height=-5)
+    def test_validate_grid_size_requires_positive_dimensions(self):
+        """Public grid-size validation rejects zero or negative dimensions."""
+        for dims in ((0, 10), (10, 0), (-5, 10), (10, -5)):
+            with pytest.raises(ValidationError):
+                validate_grid_size(dims)
 
     @given(width=st.integers(1, 100), height=st.integers(1, 100))
     @settings(max_examples=100)
@@ -244,24 +241,25 @@ class TestGridSizeValidation:
         assert grid.width == width
         assert grid.height == height
 
-    @pytest.mark.skip(reason="Validation removed in core types simplification")
-    def test_grid_size_maximum_enforced(self):
-        """Dimensions cannot exceed MAX_GRID_DIMENSION.
+    def test_public_env_boundary_enforces_maximum_grid_size(self):
+        """Public env constructors enforce MAX_GRID_SIZE.
 
         Contract: core_types.md - Invariants I3, I4
-        Implementation enforces: width, height <= MAX_GRID_SIZE
         """
-        from plume_nav_sim.core.constants import MAX_GRID_SIZE
+        from plume_nav_sim.envs.plume_env import create_plume_env
 
         max_width, max_height = MAX_GRID_SIZE
 
         # At maximum should work
-        grid = GridSize(width=max_width, height=max_height)
-        assert grid.width == max_width
+        env = create_plume_env(grid_size=(max_width, max_height), render_mode="rgb_array")
+        try:
+            assert tuple(env.grid_size) == (max_width, max_height)
+        finally:
+            env.close()
 
         # Above maximum should fail
-        with pytest.raises((ValidationError, ValueError)):
-            GridSize(width=max_width + 1, height=10)
+        with pytest.raises(ValidationError):
+            create_plume_env(grid_size=(max_width + 1, 10), render_mode="rgb_array")
 
 
 # ============================================================================
@@ -505,33 +503,24 @@ class TestAgentStateIdempotency:
 
 
 class TestAgentStateValidation:
-    """Test AgentState precondition validation."""
+    """Test AgentState lightweight-constructor semantics."""
 
-    @pytest.mark.skip(reason="Validation removed in core types simplification")
-    def test_initial_step_count_non_negative(self):
-        """Initial step_count must be non-negative.
+    def test_initial_step_count_can_be_seeded_without_constructor_validation(self):
+        """Initial step_count is stored verbatim on the lightweight dataclass.
 
-        Contract: core_types.md - Invariant I2
+        Contract: core_types.md
+        Environment-owned state maintains monotonic counters after reset().
         """
         from plume_nav_sim.core.types import AgentState
 
-        # Valid
-        state = AgentState(position=Coordinates(0, 0), step_count=0)
-        assert state.step_count == 0
+        state = AgentState(position=Coordinates(0, 0), step_count=-1)
 
-        state2 = AgentState(position=Coordinates(0, 0), step_count=5)
-        assert state2.step_count == 5
+        assert state.step_count == -1
 
-        # Invalid
-        with pytest.raises((ValidationError, ValueError)):
-            AgentState(position=Coordinates(0, 0), step_count=-1)
-
-    @pytest.mark.skip(reason="Validation removed in core types simplification")
-    def test_initial_total_reward_allows_negative(self):
+    def test_initial_total_reward_allows_negative_seed_values(self):
         """Initial total_reward can be negative for debt-based reward schemes."""
         from plume_nav_sim.core.types import AgentState
 
-        # Valid
         state = AgentState(position=Coordinates(0, 0), total_reward=0.0)
         assert state.total_reward == 0.0
 
@@ -540,10 +529,6 @@ class TestAgentStateValidation:
 
         state3 = AgentState(position=Coordinates(0, 0), total_reward=-2.5)
         assert state3.total_reward == -2.5
-
-        # Invalid input types still rejected
-        with pytest.raises((ValidationError, ValueError)):
-            AgentState(position=Coordinates(0, 0), total_reward="invalid")
 
 
 if __name__ == "__main__":

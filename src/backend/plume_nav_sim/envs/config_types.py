@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from .._compat import ValidationError
 from ..core.types import (
@@ -19,6 +20,20 @@ from ..core.types import (
     create_coordinates,
     create_grid_size,
 )
+
+
+def _json_safe_value(value: Any) -> Any:
+    if isinstance(value, Coordinates):
+        return value.to_tuple()
+    if isinstance(value, GridSize):
+        return value.to_tuple()
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_json_safe_value(item) for item in value)
+    if isinstance(value, list):
+        return [_json_safe_value(item) for item in value]
+    return value
 
 
 @dataclass(frozen=True)
@@ -115,7 +130,9 @@ class EnvironmentConfig:
             "max_steps": self.max_steps,
             "goal_radius": self.goal_radius,
             "enable_rendering": self.enable_rendering,
-            "plume_params": dict(self.plume_params) if self.plume_params else {},
+            "plume_params": _json_safe_value(
+                dict(self.plume_params) if self.plume_params else {}
+            ),
         }
 
 

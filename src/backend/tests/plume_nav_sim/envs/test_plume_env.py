@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
+import warnings
 
+import plume_nav_sim as pns
+from plume_nav_sim._compat import ValidationError
 from plume_nav_sim.envs.plume_env import create_plume_env
 from plume_nav_sim.media.schema import DIMS_TYX, SCHEMA_VERSION
 
@@ -99,3 +103,45 @@ def test_create_plume_env_video_backend_advances_frames():
         assert env.plume.frame_index == 1
     finally:
         env.close()
+
+
+def test_create_plume_env_rejects_explicit_out_of_bounds_source_location():
+    with pytest.raises(ValidationError, match="within grid bounds"):
+        create_plume_env(
+            plume_type="gaussian",
+            grid_size=(8, 8),
+            source_location=(99, 99),
+            max_steps=5,
+        )
+
+
+def test_make_env_rejects_legacy_out_of_bounds_source_location():
+    with pytest.raises(ValidationError, match="coordinates outside grid bounds"):
+        pns.make_env(
+            grid_size=(8, 8),
+            source_location=(99, 99),
+            action_type="discrete",
+        )
+
+
+def test_make_env_legacy_info_surface_matches_default_info_keys():
+    default_env = pns.make_env(grid_size=(8, 8), source_location=(4, 4))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        legacy_env = pns.make_env(
+            grid_size=(8, 8),
+            source_location=(4, 4),
+            action_type="discrete",
+        )
+
+    try:
+        _, default_reset_info = default_env.reset(seed=123)
+        _, legacy_reset_info = legacy_env.reset(seed=123)
+        assert set(default_reset_info.keys()) == set(legacy_reset_info.keys())
+
+        _, _, _, _, default_step_info = default_env.step(0)
+        _, _, _, _, legacy_step_info = legacy_env.step(0)
+        assert set(default_step_info.keys()) == set(legacy_step_info.keys())
+    finally:
+        default_env.close()
+        legacy_env.close()

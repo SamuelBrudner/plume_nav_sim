@@ -363,6 +363,8 @@ class PlumeEnv(gym.Env):
             "agent_position": (pos.x, pos.y),
             "agent_xy": (pos.x, pos.y),
             "distance_to_goal": distance_to_goal,
+            "goal_location": self.source_location,
+            "source_location": self.source_location,
             "step_count": self._step_count,
             "total_reward": self._agent_state.total_reward,
             "goal_reached": terminated,
@@ -526,18 +528,6 @@ def create_plume_env(plume_type: str = "gaussian", **kwargs: Any) -> PlumeEnv:
             parameter_name="plume_type",
             parameter_value=plume_type,
         )
-
-    # Clamp source_location to grid center if out-of-bounds (for gym.make compatibility)
-    grid_size = kwargs.get("grid_size")
-    source_location = kwargs.get("source_location")
-    if grid_size is not None and source_location is not None:
-        if isinstance(grid_size, (tuple, list)) and len(grid_size) == 2:
-            w, h = int(grid_size[0]), int(grid_size[1])
-            if isinstance(source_location, (tuple, list)) and len(source_location) == 2:
-                sx, sy = int(source_location[0]), int(source_location[1])
-                if sx < 0 or sx >= w or sy < 0 or sy >= h:
-                    # Source outside grid - default to center
-                    kwargs["source_location"] = (w // 2, h // 2)
 
     if plume_kind == "gaussian":
         return PlumeEnv(**kwargs)

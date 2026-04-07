@@ -233,14 +233,24 @@ class ComponentBasedEnvironment(gym.Env):
             )
 
     def _build_step_info(self) -> dict[str, Any]:
-        return {
+        pos = self._agent_state.position
+        info = {
             "step_count": self._step_count,
             "agent_position": (
-                self._agent_state.position.x,
-                self._agent_state.position.y,
+                pos.x,
+                pos.y,
             ),
-            "distance_to_goal": self._distance_to_goal(self._agent_state.position),
+            "agent_xy": (pos.x, pos.y),
+            "distance_to_goal": self._distance_to_goal(pos),
+            "goal_location": (self.goal_location.x, self.goal_location.y),
+            "source_location": (self.goal_location.x, self.goal_location.y),
+            "total_reward": self._agent_state.total_reward,
+            "goal_reached": self._agent_state.goal_reached,
+            "episode_count": self._episode_count,
         }
+        if self._seed is not None:
+            info["seed"] = self._seed
+        return info
 
     def _sample_random_start_location(self) -> Coordinates:
         rng = getattr(self, "_rng", None)
@@ -349,13 +359,20 @@ class ComponentBasedEnvironment(gym.Env):
         """Generate initial observation and info dict."""
         env_state = self._build_env_state_dict()
         observation = self._observation_model.get_observation(env_state)
+        pos = self._agent_state.position
         info = {
             "seed": self._seed,
             "agent_position": (
-                self._agent_state.position.x,
-                self._agent_state.position.y,
+                pos.x,
+                pos.y,
             ),
+            "agent_xy": (pos.x, pos.y),
             "goal_location": (self.goal_location.x, self.goal_location.y),
+            "source_location": (self.goal_location.x, self.goal_location.y),
+            "step_count": 0,
+            "episode_count": self._episode_count,
+            "total_reward": self._agent_state.total_reward,
+            "goal_reached": False,
         }
         return observation, info
 

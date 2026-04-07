@@ -14,6 +14,7 @@ from hypothesis import strategies as st
 from plume_nav_sim._compat import (
     ValidationError,
     create_seeded_rng,
+    validate_grid_size,
     validate_seed_value,
 )
 from plume_nav_sim.core.geometry import (
@@ -205,21 +206,19 @@ class TestGridSizeProperties:
         st.integers(min_value=-100, max_value=0),
         st.integers(min_value=1, max_value=100),
     )
-    @pytest.mark.skip(reason="Validation removed in core types simplification")
     def test_grid_size_rejects_non_positive_width(self, width, height):
-        """Property: GridSize rejects width <= 0."""
-        with pytest.raises((ValidationError, ValueError)):
-            GridSize(width=width, height=height)
+        """Property: public grid validation rejects width <= 0."""
+        with pytest.raises(ValidationError):
+            validate_grid_size((width, height))
 
     @given(
         st.integers(min_value=1, max_value=100),
         st.integers(min_value=-100, max_value=0),
     )
-    @pytest.mark.skip(reason="Validation removed in core types simplification")
     def test_grid_size_rejects_non_positive_height(self, width, height):
-        """Property: GridSize rejects height <= 0."""
-        with pytest.raises((ValidationError, ValueError)):
-            GridSize(width=width, height=height)
+        """Property: public grid validation rejects height <= 0."""
+        with pytest.raises(ValidationError):
+            validate_grid_size((width, height))
 
     @given(
         st.integers(min_value=1, max_value=1024),
