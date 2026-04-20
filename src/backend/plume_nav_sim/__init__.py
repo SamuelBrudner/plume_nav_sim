@@ -42,7 +42,7 @@ PlumeEnv: Optional[object]
 create_plume_env: Optional[object]
 create_component_environment: Optional[object]
 _ENV_IMPORT_ERROR: Optional[Exception] = None
-_COMPATIBILITY_COMPONENT_KEYS = frozenset(
+_SELECTOR_ENV_KEYS = frozenset(
     {
         "action_type",
         "observation_type",
@@ -54,26 +54,19 @@ _COMPATIBILITY_COMPONENT_KEYS = frozenset(
         "wind_speed",
         "wind_vector",
         "wind_noise_std",
+        "goal_location",
     }
 )
-_COMPATIBILITY_COMPONENT_PREFIXES = ("movie_",)
-_STABLE_ONLY_ENV_KEYS = frozenset(
-    {
-        "plume_type",
-        "sensor_model",
-        "action_model",
-        "reward_fn",
-        "video_path",
-        "video_data",
-        "video_fps",
-        "video_pixel_to_grid",
-        "video_origin",
-        "video_extent",
-        "video_step_policy",
-        "video_config",
-    }
-)
-
+_SELECTOR_ENV_PREFIXES = ("movie_",)
+_VIDEO_TO_MOVIE_ALIASES = {
+    "video_path": "movie_path",
+    "video_fps": "movie_fps",
+    "video_pixel_to_grid": "movie_pixel_to_grid",
+    "video_origin": "movie_origin",
+    "video_extent": "movie_extent",
+    "video_step_policy": "movie_step_policy",
+    "video_data": "movie_data",
+}
 try:
     from .envs import PlumeEnv as _PlumeEnv
     from .envs import create_component_environment as _create_component_environment
@@ -180,8 +173,6 @@ def get_package_info(
             environment_details["available"].append("PlumeEnv")
             environment_details["factory"] = "create_plume_env"
             environment_details["module"] = "plume_nav_sim.envs.plume_env"
-        if create_component_environment is not None:
-            environment_details["available"].append("ComponentBasedEnvironment")
         if not environment_details["available"]:
             environment_details["error"] = str(_ENV_IMPORT_ERROR)
 
@@ -198,52 +189,60 @@ def get_package_info(
     return info
 
 
-def _compatibility_component_keys(kwargs: Mapping[str, object]) -> set[str]:
-    keys = {key for key in kwargs if key in _COMPATIBILITY_COMPONENT_KEYS}
+def _selector_keys(kwargs: Mapping[str, object]) -> set[str]:
+    keys = {key for key in kwargs if key in _SELECTOR_ENV_KEYS}
     keys.update(
         key
         for key in kwargs
-        if any(key.startswith(prefix) for prefix in _COMPATIBILITY_COMPONENT_PREFIXES)
+        if any(key.startswith(prefix) for prefix in _SELECTOR_ENV_PREFIXES)
     )
     return keys
 
 
-def _stable_only_keys(kwargs: Mapping[str, object]) -> set[str]:
-    keys = {key for key in kwargs if key in _STABLE_ONLY_ENV_KEYS}
+def _uses_selector_route(kwargs: Mapping[str, object]) -> bool:
+    if _selector_keys(kwargs):
+        return True
     plume_value = kwargs.get("plume")
-    if "plume" in kwargs and not isinstance(plume_value, str):
-        keys.add("plume")
-    return keys
+    if isinstance(plume_value, str) and any(
+        alias in kwargs for alias in _VIDEO_TO_MOVIE_ALIASES
+    ):
+        return True
+    return False
 
 
-def _classify_make_env_kwargs(kwargs: Mapping[str, object]) -> str:
-    compatibility_keys = _compatibility_component_keys(kwargs)
-    stable_keys = _stable_only_keys(kwargs)
-    if compatibility_keys and stable_keys:
+def _normalize_selector_make_env_kwargs(kwargs: Mapping[str, object]) -> dict[str, Any]:
+    selector_kwargs: dict[str, Any] = dict(kwargs)
+    forbidden_keys = {
+        key
+        for key in ("sensor_model", "action_model", "reward_fn", "video_config")
+        if key in selector_kwargs
+    }
+    plume_value = selector_kwargs.get("plume")
+    if "plume" in selector_kwargs and not isinstance(plume_value, str):
+        forbidden_keys.add("plume")
+    if forbidden_keys:
         raise ValidationError(
-            "Cannot mix deprecated component kwargs with stable PlumeEnv kwargs",
+            "Selector kwargs cannot be mixed with direct component/video injection kwargs",
             parameter_name="kwargs",
-            parameter_value=sorted(compatibility_keys | stable_keys),
-            context={
-                "deprecated_component_kwargs": sorted(compatibility_keys),
-                "stable_plume_env_kwargs": sorted(stable_keys),
-            },
+            parameter_value=sorted(forbidden_keys),
         )
-    return "component" if compatibility_keys else "stable"
 
+    for video_key, movie_key in _VIDEO_TO_MOVIE_ALIASES.items():
+        if video_key in selector_kwargs and movie_key not in selector_kwargs:
+            selector_kwargs[movie_key] = selector_kwargs.pop(video_key)
 
-def _normalize_component_make_env_kwargs(kwargs: Mapping[str, object]) -> dict[str, Any]:
-    component_kwargs: dict[str, Any] = dict(kwargs)
-    source_location = component_kwargs.pop("source_location", None)
-    if source_location is not None and "goal_location" not in component_kwargs:
-        component_kwargs["goal_location"] = source_location
-    plume_params = component_kwargs.pop("plume_params", None)
-    if plume_params is not None and "plume_sigma" not in component_kwargs:
+    source_location = selector_kwargs.pop("source_location", None)
+    if source_location is not None and "goal_location" not in selector_kwargs:
+        selector_kwargs["goal_location"] = source_location
+
+    plume_params = selector_kwargs.pop("plume_params", None)
+    if plume_params is not None and "plume_sigma" not in selector_kwargs:
         if isinstance(plume_params, Mapping):
             sigma_value = plume_params.get("sigma")
             if sigma_value is not None:
-                component_kwargs["plume_sigma"] = float(sigma_value)
-    plume_value = component_kwargs.get("plume")
+                selector_kwargs["plume_sigma"] = float(sigma_value)
+
+    plume_value = selector_kwargs.get("plume")
     if isinstance(plume_value, str):
         normalized_plume = plume_value.strip().lower()
         if normalized_plume not in {"static", "movie"}:
@@ -253,8 +252,26 @@ def _normalize_component_make_env_kwargs(kwargs: Mapping[str, object]) -> dict[s
                 parameter_value=plume_value,
                 expected_format="static|movie",
             )
-        component_kwargs["plume"] = normalized_plume
-    return component_kwargs
+        selector_kwargs["plume"] = normalized_plume
+    plume_type = selector_kwargs.pop("plume_type", None)
+    if plume_type is not None:
+        if not isinstance(plume_type, str):
+            raise ValidationError(
+                "plume_type must be a string",
+                parameter_name="plume_type",
+                parameter_value=plume_type,
+            )
+        normalized_plume_type = plume_type.strip().lower()
+        if normalized_plume_type == "video":
+            selector_kwargs["plume"] = "movie"
+        elif normalized_plume_type != "gaussian":
+            raise ValidationError(
+                "plume_type must be 'gaussian' or 'video'",
+                parameter_name="plume_type",
+                parameter_value=plume_type,
+                expected_format="gaussian|video",
+            )
+    return selector_kwargs
 
 
 def _normalize_stable_make_env_kwargs(kwargs: Mapping[str, object]) -> dict[str, Any]:
@@ -304,20 +321,16 @@ def _normalize_stable_make_env_kwargs(kwargs: Mapping[str, object]) -> dict[str,
 
 
 def make_env(**kwargs):
-    route = _classify_make_env_kwargs(kwargs)
-    if route == "component":
-        if create_component_environment is None:
+    if _uses_selector_route(kwargs):
+        if create_plume_env is None:
             raise RuntimeError(
-                "Component environment factory not available to handle compatibility kwargs."
+                "PlumeEnv not available. Ensure gymnasium and dependencies are installed."
             )
-        component_kwargs = _normalize_component_make_env_kwargs(kwargs)
+        from .envs.factory import _create_plume_env_from_selectors
 
-        warnings.warn(
-            "make_env received compatibility kwargs; routing to component environment factory.",
-            DeprecationWarning,
-            stacklevel=2,
+        return _create_plume_env_from_selectors(
+            **_normalize_selector_make_env_kwargs(kwargs)
         )
-        return create_component_environment(**component_kwargs)
 
     if create_plume_env is None:
         raise RuntimeError(

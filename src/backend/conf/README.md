@@ -1,8 +1,7 @@
 # Hydra Configuration Files
 
-This directory contains YAML configuration files for the component-config compatibility layer using [Hydra](https://hydra.cc/).
-For the canonical runtime config used by `PlumeEnv` and `make_env()`, prefer
-`plume_nav_sim.EnvironmentConfig`.
+This directory contains YAML configuration files for the selector-driven runtime composition flow using [Hydra](https://hydra.cc/).
+For direct code usage, prefer `plume_nav_sim.make_env(...)` or `plume_nav_sim.config.SimulationSpec`.
 
 ## Structure
 
@@ -21,19 +20,16 @@ conf/
 
 ```python
 from omegaconf import OmegaConf
-from plume_nav_sim.config import (
-    ComponentEnvironmentConfig,
-    create_component_environment_from_config,
-)
+from plume_nav_sim.config import SimulationSpec, build_env
 
 # Load YAML
 cfg_dict = OmegaConf.to_container(OmegaConf.load("conf/experiment/sparse_simple.yaml"))
 
-# Parse into Pydantic model (validates!)
-config = ComponentEnvironmentConfig(**cfg_dict)
+# Parse into the structured simulation spec
+spec = SimulationSpec(**cfg_dict)
 
 # Create environment
-env = create_component_environment_from_config(config)
+env = build_env(spec)
 ```
 
 ### Method 2: Hydra Decorator (Recommended for Applications)
@@ -41,19 +37,13 @@ env = create_component_environment_from_config(config)
 ```python
 import hydra
 from omegaconf import DictConfig
-from plume_nav_sim.config import (
-    ComponentEnvironmentConfig,
-    create_component_environment_from_config,
-)
+from plume_nav_sim.config import SimulationSpec, build_env
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig):
-    # Convert to Pydantic (validates)
-    config = ComponentEnvironmentConfig(**cfg)
-    
-    # Create environment
-    env = create_component_environment_from_config(config)
-    
+    spec = SimulationSpec(**cfg)
+    env = build_env(spec)
+
     # Your training loop...
     obs, info = env.reset()
     # ...
@@ -73,10 +63,7 @@ python train.py experiment=dense_oriented grid_size=[256,256]
 
 ```python
 from hydra import compose, initialize
-from plume_nav_sim.config import (
-    ComponentEnvironmentConfig,
-    create_component_environment_from_config,
-)
+from plume_nav_sim.config import SimulationSpec, build_env
 
 with initialize(version_base=None, config_path="conf"):
     cfg = compose(config_name="config", overrides=[
@@ -84,9 +71,9 @@ with initialize(version_base=None, config_path="conf"):
         "max_steps=2000",
         "action.step_size=2"
     ])
-    
-    config = ComponentEnvironmentConfig(**cfg)
-    env = create_component_environment_from_config(config)
+
+    spec = SimulationSpec(**cfg)
+    env = build_env(spec)
 ```
 
 ## Configuration Options

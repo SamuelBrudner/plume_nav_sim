@@ -7,7 +7,7 @@ creation, Gymnasium registration, and how to write your own components.
 - Actions: `plume_nav_sim.interfaces.ActionProcessor`
 - Observations: `plume_nav_sim.interfaces.ObservationModel`
 - Rewards: `plume_nav_sim.interfaces.RewardFunction`
-- Env: `plume_nav_sim.envs.component_env.ComponentBasedEnvironment`
+- Env: `plume_nav_sim.envs.PlumeEnv`
 
 See also: contracts for each interface under `contracts/*.md`.
 
@@ -17,8 +17,8 @@ See also: contracts for each interface under `contracts/*.md`.
 
 - Components define spaces and behavior (no inheritance required; duck typing is used).
 - The environment delegates to injected components for step, observation, and reward.
-- You can wire components directly, via factories, or register a Gymnasium ID that
-  uses the component-based environment under the hood.
+- You can wire components directly, via selectors, or register a Gymnasium ID that
+  uses `PlumeEnv` under the hood.
 
 ---
 
@@ -37,12 +37,12 @@ Implementations may ignore unused keys. Custom envs/wrappers can override
 
 ---
 
-## Quick Start: Factory Assembly
+## Quick Start: Selector Assembly
 
 ```python
-from plume_nav_sim.envs.factory import create_component_environment
+import plume_nav_sim as pns
 
-env = create_component_environment(
+env = pns.make_env(
     grid_size=(128, 128),
     goal_location=(64, 64),
     action_type='oriented',        # 'discrete', 'oriented', or 'run_tumble'
@@ -64,9 +64,9 @@ obs, info = env.reset(seed=42)
 import numpy as np
 from plume_nav_sim.actions import DiscreteGridActions
 from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.envs.component_env import ComponentBasedEnvironment
+from plume_nav_sim.envs import PlumeEnv
 from plume_nav_sim.observations import ConcentrationSensor
-from plume_nav_sim.plume.concentration_field import ConcentrationField
+from plume_nav_sim.plume.gaussian import GaussianPlume
 from plume_nav_sim.rewards import SparseGoalReward
 
 # Components
@@ -78,20 +78,16 @@ obs_model = ConcentrationSensor()
 reward_fn = SparseGoalReward(goal_position=goal, goal_radius=1.0)
 
 # Simple Gaussian field
-field = ConcentrationField(grid_size=grid, enable_caching=True)
-x = np.arange(grid.width); y = np.arange(grid.height)
-xx, yy = np.meshgrid(x, y)
-field.field_array = np.exp(-((xx-goal.x)**2 + (yy-goal.y)**2) / (2 * 20.0**2))).astype(np.float32)
-field.is_generated = True
+field = GaussianPlume(grid_size=grid, source_location=goal, sigma=20.0)
 
 # Env
-env = ComponentBasedEnvironment(
-    action_processor=actions,
-    observation_model=obs_model,
-    reward_function=reward_fn,
-    concentration_field=field,
+env = PlumeEnv(
     grid_size=grid,
-    goal_location=goal,
+    source_location=goal,
+    plume=field,
+    action_model=actions,
+    sensor_model=obs_model,
+    reward_fn=reward_fn,
 )
 ```
 
@@ -99,38 +95,31 @@ env = ComponentBasedEnvironment(
 
 ## Config-Driven Creation
 
-Use the component-config compatibility layer for reproducible component-injection experiments.
-For the canonical runtime config used by `PlumeEnv` and `make_env()`, prefer
-`plume_nav_sim.EnvironmentConfig`.
+Use `SimulationSpec` for reproducible selector-driven experiments. The older
+component-config models remain compatibility adapters only.
 
 ```python
-from plume_nav_sim.config.factories import create_component_environment_from_config
-from plume_nav_sim.config.component_configs import (
-    ActionConfig,
-    ComponentEnvironmentConfig,
-    ObservationConfig,
-    PlumeConfig,
-    RewardConfig,
-)
+from plume_nav_sim.config import SimulationSpec, build_env
 
-config = ComponentEnvironmentConfig(
+spec = SimulationSpec(
     grid_size=(128, 128),
-    goal_location=(64, 64),
+    source_location=(64, 64),
     max_steps=1000,
-    action=ActionConfig(type='oriented', step_size=1),
-    observation=ObservationConfig(type='antennae', n_sensors=3, sensor_distance=2.0),
-    reward=RewardConfig(type='step_penalty', goal_radius=2.0),
-    plume=PlumeConfig(sigma=20.0, enable_caching=True, normalize=True),
+    action_type='oriented',
+    observation_type='antennae',
+    reward_type='step_penalty',
+    goal_radius=2.0,
+    plume_sigma=20.0,
 )
 
-env = create_component_environment_from_config(config)
+env = build_env(spec)
 ```
 
 See also (external plug‑and‑play, config‑based DI):
 
 - Demo README section “Config‑based DI via SimulationSpec”: `plug-and-play-demo/README.md`
 - Minimal, runnable spec file: `plug-and-play-demo/configs/simulation_spec.json`
-- Stable notebook showing `SimulationSpec` + Component Env: `notebooks/stable/di_simulation_spec_component_env.ipynb`
+- Stable notebook showing `SimulationSpec` env construction: `notebooks/stable/di_simulation_spec_component_env.ipynb`
 
 ---
 
@@ -225,5 +214,5 @@ returning your implementation.
 
 ## Backward Compatibility
 
-For new work, target `PlumeEnv`, `ComponentBasedEnvironment`, or manual component
+For new work, target `PlumeEnv` plus either selector kwargs or manual component
 injection.

@@ -6,8 +6,7 @@ import numpy as np
 
 import plume_nav_sim as pns
 from plume_nav_sim.actions import DiscreteGridActions
-from plume_nav_sim.core.geometry import GridSize
-from plume_nav_sim.envs.component_env import ComponentBasedEnvironment
+from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.interfaces import ObservationModel, RewardFunction
 from plume_nav_sim.observations import ConcentrationSensor
 from plume_nav_sim.plume.gaussian import GaussianPlume
@@ -52,38 +51,18 @@ class NoisyConcentrationSensor(ObservationModel):
         return meta
 
 
-def build_environment() -> ComponentBasedEnvironment:
+def build_environment() -> pns.PlumeEnv:
     """Construct an environment using custom components."""
-
-    wrapper = pns.make_env()
-    try:
-        base_env: ComponentBasedEnvironment | None = None
-        # Prefer direct access to the core component environment if exposed
-        core_env = getattr(wrapper, "_core_env", None)
-        if isinstance(core_env, ComponentBasedEnvironment):
-            base_env = core_env
-        else:
-            # Fallback: unwrap common Gymnasium wrappers to locate the component env
-            current = getattr(wrapper, "_env", None)
-            visited: set[int] = set()
-            while current is not None and id(current) not in visited:
-                visited.add(id(current))
-                if isinstance(current, ComponentBasedEnvironment):
-                    base_env = current
-                    break
-                current = getattr(current, "env", None)
-
-        if base_env is None:
-            raise RuntimeError(
-                "Unexpected environment type; expected ComponentBasedEnvironment"
-            )
-
-        grid_size: GridSize = base_env.grid_size
-        goal_location = base_env.goal_location
-        goal_radius = base_env.goal_radius
-        max_steps = base_env.max_steps
-    finally:
-        wrapper.close()
+    grid_size = GridSize(
+        width=pns.DEFAULT_GRID_SIZE[0],
+        height=pns.DEFAULT_GRID_SIZE[1],
+    )
+    goal_location = Coordinates(
+        x=pns.DEFAULT_SOURCE_LOCATION[0],
+        y=pns.DEFAULT_SOURCE_LOCATION[1],
+    )
+    goal_radius = pns.DEFAULT_GOAL_RADIUS
+    max_steps = pns.DEFAULT_MAX_STEPS
 
     action_processor = DiscreteGridActions(step_size=1)
     observation_model = NoisyConcentrationSensor(sigma=0.1)
@@ -92,15 +71,15 @@ def build_environment() -> ComponentBasedEnvironment:
 
     reward = DenseReward(goal_radius=goal_radius)
 
-    return ComponentBasedEnvironment(
-        action_processor=action_processor,
-        observation_model=observation_model,
-        reward_function=reward,
-        concentration_field=field,
+    return pns.PlumeEnv(
         grid_size=grid_size,
-        goal_location=goal_location,
+        source_location=goal_location,
         goal_radius=goal_radius,
         max_steps=max_steps,
+        plume=field,
+        sensor_model=observation_model,
+        action_model=action_processor,
+        reward_fn=reward,
     )
 
 

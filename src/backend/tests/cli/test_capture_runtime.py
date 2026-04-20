@@ -6,7 +6,7 @@ from pathlib import Path
 from plume_nav_sim.cli import capture
 from plume_nav_sim.data_capture import RunRecorder
 from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper
-from plume_nav_sim.envs import create_component_environment
+from plume_nav_sim import make_env
 from plume_nav_sim.envs.config_types import EnvironmentConfig
 
 
@@ -27,7 +27,7 @@ def test_environment_config_to_dict_is_json_safe() -> None:
 
 
 def test_data_capture_wrapper_handles_partial_meta_overrides(tmp_path: Path) -> None:
-    env = create_component_environment(
+    env = make_env(
         grid_size=(8, 8),
         goal_location=(4, 4),
         max_steps=1,

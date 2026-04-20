@@ -10,6 +10,7 @@ import plume_nav_sim as pns
 from plume_nav_sim._compat import ValidationError
 from plume_nav_sim.envs.plume_env import create_plume_env
 from plume_nav_sim.media.schema import DIMS_TYX, SCHEMA_VERSION
+from plume_nav_sim.observations import ConcentrationSensor
 
 
 class _FakeSlice:
@@ -136,15 +137,11 @@ def test_make_env_normalizes_static_plume_to_stable_plume_env():
 
 
 def test_make_env_normalizes_movie_plume_to_stable_video_env():
-    with pytest.warns(
-        DeprecationWarning,
-        match="make_env\\(plume='movie'\\) is deprecated; use plume_type='video' instead",
-    ):
-        env = pns.make_env(
-            plume="movie",
-            video_data=_make_video_data_array(),
-            max_steps=3,
-        )
+    env = pns.make_env(
+        plume="movie",
+        video_data=_make_video_data_array(),
+        max_steps=3,
+    )
 
     try:
         assert isinstance(env, pns.PlumeEnv)
@@ -156,23 +153,20 @@ def test_make_env_normalizes_movie_plume_to_stable_video_env():
         env.close()
 
 
-def test_make_env_rejects_mixed_stable_and_component_kwargs():
+def test_make_env_rejects_selector_route_with_direct_component_kwargs():
     with pytest.raises(
         ValidationError,
-        match="Cannot mix deprecated component kwargs with stable PlumeEnv kwargs",
+        match="Selector kwargs cannot be mixed with direct component/video injection kwargs",
     ):
         pns.make_env(
-            plume="movie",
-            video_data=_make_video_data_array(),
             action_type="discrete",
+            sensor_model=ConcentrationSensor(),
         )
 
 
-def test_make_env_component_route_warns_and_returns_compatibility_env():
-    with pytest.warns(
-        DeprecationWarning,
-        match="routing to component environment factory",
-    ):
+def test_make_env_selector_route_returns_plume_env_without_deprecation_warning():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         env = pns.make_env(
             grid_size=(8, 8),
             source_location=(4, 4),
@@ -180,7 +174,13 @@ def test_make_env_component_route_warns_and_returns_compatibility_env():
         )
 
     try:
-        assert not isinstance(env, pns.PlumeEnv)
+        dep_messages = [
+            str(warning.message)
+            for warning in caught
+            if issubclass(warning.category, DeprecationWarning)
+        ]
+        assert dep_messages == []
+        assert isinstance(env, pns.PlumeEnv)
         _, info = env.reset(seed=7)
         assert info["seed"] == 7
     finally:

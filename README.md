@@ -78,12 +78,12 @@ print(info["agent_xy"])  # starting position
   env = gym.make(ENV_ID)
   ```
 
-- **Component knobs**: use the explicit component factory for `action_type`, `observation_type`, `reward_type`, wind, or movie-plume options:
+- **Selector knobs**: use `make_env(...)` directly for `action_type`, `observation_type`, `reward_type`, wind, or movie-plume options:
 
   ```python
-  from plume_nav_sim.envs import create_component_environment
+  import plume_nav_sim as pns
 
-  env = create_component_environment(
+  env = pns.make_env(
       action_type="run_tumble",
       observation_type="antennae",
       reward_type="step_penalty",
@@ -384,9 +384,9 @@ Troubleshooting “'widget' is not a recognised backend name”:
     - Output: `src/backend/docs/notebooks/capture_end_to_end.html`
   - Related docs: `src/backend/docs/data_capture_schemas.md`, `src/backend/docs/data_catalog_capture.md`
 
-- Stable DI notebook (SimulationSpec + Component Env)
+- Stable environment-construction notebook
   - Notebook: `notebooks/stable/di_simulation_spec_component_env.ipynb`
-  - Demonstrates DI factory (`create_component_environment`) and spec‑first composition via `SimulationSpec` + `prepare()`
+  - Demonstrates selector-based env construction and spec-first composition via `SimulationSpec` + `prepare()`
 
 ### Test and performance requirements
 
@@ -413,8 +413,8 @@ These policies are referenced by dataset ingest and loader components to ensure 
 
 - `plume_nav_sim.make_env()` → default environment
 - For `gym.make()`, call `ensure_registered()` and use `ENV_ID`.
-- `ComponentBasedEnvironment` → DI-powered core that consumes protocol-compliant components (`plume_nav_sim.interfaces`)
-- `plume_nav_sim.envs.factory.create_component_environment()` → factory with validation and curated defaults
+- `PlumeEnv` → the only runtime environment implementation, with both direct component injection and selector-based construction
+- `plume_nav_sim.envs.factory.create_component_environment()` → deprecated adapter over the active `PlumeEnv` selector path
 - `docs/extending/` → deep dives on protocols, wiring, and testing
 
 ## 6. Reproducibility Workflow

@@ -39,10 +39,10 @@ class MyReward:
 **Use it:**
 
 ```python
-from plume_nav_sim.envs import ComponentBasedEnvironment
+from plume_nav_sim.envs import PlumeEnv
 
-env = ComponentBasedEnvironment(
-    reward_function=MyReward(goal_position=Coordinates(64, 64)),
+env = PlumeEnv(
+    reward_fn=MyReward(goal_position=Coordinates(64, 64)),
     ...
 )
 ```
@@ -509,6 +509,6 @@ def create_reward_function(config, goal_location):
 3. Write contract tests (inherit from `TestRewardFunctionInterface`)
 4. Add implementation-specific tests
 5. Integrate with config system (optional)
-6. Use in `ComponentBasedEnvironment`
+6. Use in `PlumeEnv`
 
 **That's it—no inheritance, no registration, just implement and use!**

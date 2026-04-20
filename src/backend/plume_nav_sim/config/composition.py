@@ -16,7 +16,7 @@ from pydantic import (
 )
 
 from plume_nav_sim._compat import is_space_subset
-from plume_nav_sim.envs import create_component_environment
+from plume_nav_sim.envs.factory import _create_plume_env_from_selectors
 
 # ===== Specs =====
 
@@ -223,7 +223,7 @@ def _add_if_not_none(
     kwargs[key] = transform(value) if transform is not None else value
 
 
-def _build_component_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
+def _build_selector_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
     kwargs: dict[str, Any] = {}
     _add_if_not_none(kwargs, "grid_size", spec.grid_size, tuple)
     _add_if_not_none(kwargs, "goal_location", spec.source_location, tuple)
@@ -273,9 +273,8 @@ def _build_component_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any
 
 
 def build_env(spec: SimulationSpec):
-    kwargs = _build_component_env_kwargs_from_spec(spec)
-    kwargs["warn_deprecated"] = False
-    return create_component_environment(**kwargs)
+    kwargs = _build_selector_env_kwargs_from_spec(spec)
+    return _create_plume_env_from_selectors(**kwargs)
 
 
 def _make_random_sampler(env) -> Any:

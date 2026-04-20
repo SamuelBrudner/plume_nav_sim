@@ -21,14 +21,14 @@ import gymnasium as gym
 import numpy as np
 import pytest
 
-from plume_nav_sim.envs import create_component_environment
+from plume_nav_sim import make_env
 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
 
 # Utilities -----------------------------------------------------------------
 
 
 def create_test_env(*, rgb: bool = False):
-    return create_component_environment(
+    return make_env(
         grid_size=(16, 16),
         goal_location=(8, 8),
         action_type="oriented",

@@ -17,8 +17,6 @@ from plume_nav_sim.config import (
     get_default_environment_config,
 )
 from plume_nav_sim.envs.config_types import EnvironmentConfig as CanonicalEnvironmentConfig
-from plume_nav_sim.observations import WindVectorSensor
-from plume_nav_sim.rewards import StepPenaltyReward
 
 
 def test_canonical_and_component_config_surfaces_are_distinct() -> None:
@@ -63,14 +61,19 @@ def test_component_config_adapter_normalizes_explicit_env_kwargs() -> None:
 
     kwargs = component_environment_config_to_kwargs(config)
 
-    assert kwargs["grid_size"].to_tuple() == (32, 24)
-    assert kwargs["goal_location"].to_tuple() == (5, 6)
-    assert kwargs["start_location"].to_tuple() == (1, 2)
+    assert kwargs["grid_size"] == (32, 24)
+    assert kwargs["goal_location"] == (5, 6)
+    assert kwargs["start_location"] == (1, 2)
     assert kwargs["max_steps"] == 77
     assert kwargs["render_mode"] is None
-    assert isinstance(kwargs["observation_model"], WindVectorSensor)
-    assert isinstance(kwargs["reward_function"], StepPenaltyReward)
-    assert kwargs["wind_field"] is not None
+    assert kwargs["action_type"] == "discrete"
+    assert kwargs["step_size"] == 3
+    assert kwargs["observation_type"] == "wind_vector"
+    assert kwargs["reward_type"] == "step_penalty"
+    assert kwargs["plume_sigma"] == 11.0
+    assert kwargs["wind_direction_deg"] == 90.0
+    assert kwargs["wind_speed"] == 2.0
+    assert kwargs["enable_wind"] is True
 
 
 def test_deprecated_factory_alias_delegates(monkeypatch: pytest.MonkeyPatch) -> None:

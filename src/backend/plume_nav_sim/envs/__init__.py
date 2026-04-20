@@ -14,8 +14,7 @@ from ..constants import (
     DEFAULT_MAX_STEPS,
     DEFAULT_SOURCE_LOCATION,
 )
-from .component_env import ComponentBasedEnvironment
-from .factory import create_component_environment
+from .factory import _create_plume_env_from_selectors, create_component_environment
 from .plume_env import PlumeEnv, create_plume_env
 
 SUPPORTED_ENVIRONMENTS = ("plume_env", "plume", "PlumeEnv", "component")
@@ -73,16 +72,16 @@ def create_environment(
             DeprecationWarning,
             stacklevel=2,
         )
-        component_kwargs = dict(env_options or {})
-        component_kwargs.pop("plume_type", None)
-        component_kwargs.update(
+        selector_kwargs = dict(env_options or {})
+        selector_kwargs.pop("plume_type", None)
+        selector_kwargs.update(
             grid_size=effective_grid,
             goal_location=effective_source,
             max_steps=effective_max_steps,
             goal_radius=effective_goal_radius,
             render_mode=effective_render_mode,
         )
-        return create_component_environment(**component_kwargs)
+        return _create_plume_env_from_selectors(**selector_kwargs)
 
     plume_env_kwargs = dict(env_options or {})
     plume_type = plume_env_kwargs.pop("plume_type", "gaussian")
@@ -98,7 +97,6 @@ def create_environment(
 
 __all__ = [
     "PlumeEnv",
-    "ComponentBasedEnvironment",
     "create_plume_env",
     "create_component_environment",
     "create_environment",

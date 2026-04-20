@@ -23,7 +23,7 @@ from ..constants import (
     SOURCE_MARKER_SIZE,
 )
 from ..core.types import AgentState, Coordinates, GridSize
-from ..interfaces import ActionProcessor, ObservationModel, RewardFunction
+from ..interfaces import ActionProcessor, ObservationModel, RewardFunction, VectorField
 from ..observations import ConcentrationSensor
 from ..plume.gaussian import GaussianPlume
 from ..plume.protocol import ConcentrationField
@@ -76,6 +76,7 @@ class PlumeEnv(gym.Env):
         plume_params: Optional[Mapping[str, Any]] = None,
         start_location: Optional[tuple[int, int] | Coordinates] = None,
         render_mode: Optional[str] = None,
+        wind_field: Optional[VectorField] = None,
     ) -> None:
         super().__init__()
 
@@ -176,6 +177,7 @@ class PlumeEnv(gym.Env):
         self._grid_size = grid
         self.grid_size = grid.to_tuple()
         self._goal_location = goal
+        self.goal_location = goal
         self.source_location = goal.to_tuple()
         self.goal_radius = radius
         self.max_steps = steps
@@ -186,6 +188,7 @@ class PlumeEnv(gym.Env):
             if start_location is None
             else _to_coordinates(start_location, "start_location")
         )
+        self.start_location = self._start_location
 
         if plume is None:
             sigma = DEFAULT_PLUME_SIGMA
@@ -210,6 +213,9 @@ class PlumeEnv(gym.Env):
                 sigma=sigma_value,
             )
         self.plume = plume
+        self.concentration_field = plume
+        self._concentration_field = plume
+        self.plume_params = dict(plume_params) if plume_params is not None else None
 
         if action_model is None:
             action_model = DiscreteGridActions()
@@ -221,6 +227,14 @@ class PlumeEnv(gym.Env):
         self.action_model = action_model
         self.sensor_model = sensor_model
         self.reward_fn = reward_fn
+        self.action_processor = action_model
+        self.observation_model = sensor_model
+        self.reward_function = reward_fn
+        self._action_processor = action_model
+        self._observation_model = sensor_model
+        self._reward_function = reward_fn
+        self._wind_field = wind_field
+        self.wind_field = wind_field
 
         self.action_space = action_model.action_space
         self.observation_space = sensor_model.observation_space
@@ -229,7 +243,9 @@ class PlumeEnv(gym.Env):
         self._step_count = 0
         self._episode_count = 0
         self._latest_seed: Optional[int] = None
+        self._seed: Optional[int] = None
         self.np_random: Optional[np.random.Generator] = None
+        self._rng: Optional[np.random.Generator] = None
 
         self._state = EnvironmentState.CREATED
 
@@ -276,21 +292,24 @@ class PlumeEnv(gym.Env):
                 )
 
         self._latest_seed = None if seed_to_use is None else int(seed_to_use)
+        self._seed = self._latest_seed
+        self._rng = self.np_random
         self._step_count = 0
         self._episode_count += 1
 
         start_position = self._choose_start_position()
         self._agent_state = AgentState(position=start_position, orientation=0.0)
+        self.start_location = start_position
 
         self._state = EnvironmentState.READY
 
         if hasattr(self.action_model, "set_rng"):
             try:
-                self.action_model.set_rng(self.np_random)
+                self.action_model.set_rng(self._rng)
             except Exception:
                 pass
 
-        self._reset_plume_state()
+        self._reset_dynamic_fields()
 
         observation = self._get_observation()
         pos = self._agent_state.position
@@ -332,7 +351,7 @@ class PlumeEnv(gym.Env):
         self._step_count += 1
         new_state.step_count = self._step_count
 
-        self._advance_plume(self._step_count)
+        self._advance_dynamic_fields(self._step_count)
 
         reward = float(
             self.reward_fn.compute_reward(
@@ -396,6 +415,8 @@ class PlumeEnv(gym.Env):
         if seed_used is not None:
             seed_used = int(seed_used)
         self._latest_seed = seed_used
+        self._seed = seed_used
+        self._rng = self.np_random
         return [seed_used]
 
     def _ensure_ready_for_step(self) -> None:
@@ -409,12 +430,12 @@ class PlumeEnv(gym.Env):
     def _choose_start_position(self) -> Coordinates:
         if self._start_location is not None:
             return self._start_location
-        rng = self.np_random or np.random.default_rng()
+        rng = self._rng or self.np_random or np.random.default_rng()
         x = int(rng.integers(0, self._grid_size.width))
         y = int(rng.integers(0, self._grid_size.height))
         return Coordinates(x=x, y=y)
 
-    def _reset_plume_state(self) -> None:
+    def _reset_dynamic_fields(self) -> None:
         reset = getattr(self.plume, "reset", None)
         if callable(reset):
             reset(self._latest_seed)
@@ -422,11 +443,19 @@ class PlumeEnv(gym.Env):
             on_reset = getattr(self.plume, "on_reset", None)
             if callable(on_reset):
                 on_reset()
+        if self._wind_field is not None:
+            wind_reset = getattr(self._wind_field, "reset", None)
+            if callable(wind_reset):
+                wind_reset(self._latest_seed)
 
-    def _advance_plume(self, step_count: int) -> None:
+    def _advance_dynamic_fields(self, step_count: int) -> None:
         advance = getattr(self.plume, "advance_to_step", None)
         if callable(advance):
             advance(step_count)
+        if self._wind_field is not None:
+            wind_advance = getattr(self._wind_field, "advance_to_step", None)
+            if callable(wind_advance):
+                wind_advance(step_count)
 
     def _get_plume_field(self) -> np.ndarray:
         field = getattr(self.plume, "field_array", None)
@@ -443,19 +472,23 @@ class PlumeEnv(gym.Env):
                 field[y, x] = float(self.plume.sample(x, y, self._step_count))
         return field
 
-    def _get_observation(self) -> Any:
-        env_state = {
-            "agent_state": self._agent_state,
+    def _build_env_state_dict(
+        self, agent_state: Optional[AgentState] = None
+    ) -> dict[str, Any]:
+        return {
+            "agent_state": agent_state or self._agent_state,
             "plume_field": self._get_plume_field(),
             "concentration_field": self.plume,
-            "grid_size": self._grid_size,
-            "source_location": self._goal_location,
+            "wind_field": self._wind_field,
             "goal_location": self._goal_location,
+            "grid_size": self._grid_size,
             "step_count": self._step_count,
             "max_steps": self.max_steps,
-            "rng": self.np_random,
+            "rng": self._rng,
         }
-        return self.sensor_model.get_observation(env_state)
+
+    def _get_observation(self) -> Any:
+        return self.sensor_model.get_observation(self._build_env_state_dict())
 
     def _render_rgb_array(self) -> np.ndarray:
         height = self._grid_size.height

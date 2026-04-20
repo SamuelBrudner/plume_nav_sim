@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from plume_nav_sim.envs import create_component_environment
+from plume_nav_sim import make_env
 
 ACTION_TYPES = ["discrete", "oriented"]
 OBSERVATION_TYPES = ["concentration", "antennae"]
@@ -21,7 +21,7 @@ REWARD_TYPES = ["sparse", "step_penalty"]
 @pytest.mark.parametrize("reward_type", REWARD_TYPES)
 def test_environment_component_combinations(action_type, observation_type, reward_type):
     """All component combinations should initialize and run a single step."""
-    env = create_component_environment(
+    env = make_env(
         action_type=action_type,
         observation_type=observation_type,
         reward_type=reward_type,

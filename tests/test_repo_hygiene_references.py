@@ -20,8 +20,31 @@ def _active_truth_surface() -> list[Path]:
         REPO_ROOT / "src" / "backend" / ".pre-commit-config.yaml",
         REPO_ROOT / "src" / "backend" / "TESTING_GUIDE.md",
         REPO_ROOT / "src" / "backend" / "CONTRACTS.md",
+        REPO_ROOT / "src" / "backend" / "README.md",
+        REPO_ROOT / "src" / "backend" / "EXTENDING.md",
         REPO_ROOT / "src" / "backend" / "SEMANTIC_MODEL.md",
+        REPO_ROOT / "src" / "backend" / "conf" / "README.md",
         REPO_ROOT / "src" / "backend" / "docs" / "plume_types.md",
+        REPO_ROOT / "src" / "backend" / "docs" / "rendering.md",
+        REPO_ROOT / "src" / "backend" / "docs" / "extending" / "README.md",
+        REPO_ROOT
+        / "src"
+        / "backend"
+        / "docs"
+        / "extending"
+        / "component_injection.md",
+        REPO_ROOT
+        / "src"
+        / "backend"
+        / "docs"
+        / "extending"
+        / "protocol_interfaces.md",
+        REPO_ROOT
+        / "src"
+        / "backend"
+        / "docs"
+        / "extending"
+        / "custom_rewards.md",
     ]
 
 
@@ -39,8 +62,10 @@ REMOVED_REFERENCES = {
     "tests/debugger/test_replay_loader_engine.py": "replay coverage lives in the current debugger test modules",
     "tests/debugger/test_replay_driver.py": "replay coverage lives in the current debugger test modules",
     "src/backend/plume_nav_sim/envs/base_env.py": "base_env.py was removed",
+    "src/backend/plume_nav_sim/envs/component_env.py": "component_env.py was removed",
     "src/backend/plume_nav_sim/core/episode_manager.py": "episode_manager.py was removed",
     "src/plume_nav_sim/envs/plume_search_env.py": "plume_search_env.py was removed",
+    "ComponentBasedEnvironment": "the deprecated environment implementation was removed",
 }
 
 
@@ -66,6 +91,12 @@ def test_backend_tree_has_no_envs_compat_module():
     assert not (
         REPO_ROOT / "src" / "backend" / "plume_nav_sim" / "envs" / "compat.py"
     ).exists(), "Keep the env construction surface in plume_nav_sim.envs, not a legacy compat module"
+
+
+def test_backend_tree_has_no_component_env_module():
+    assert not (
+        REPO_ROOT / "src" / "backend" / "plume_nav_sim" / "envs" / "component_env.py"
+    ).exists(), "Keep PlumeEnv as the only runtime environment implementation"
 
 
 def test_runtime_package_has_no_test_named_modules():

@@ -3,7 +3,7 @@ from typing import Any
 
 from ..actions import DiscreteGridActions, OrientedGridActions, OrientedRunTumbleActions
 from ..core.geometry import Coordinates, GridSize
-from ..envs import ComponentBasedEnvironment
+from ..envs.factory import _create_plume_env_from_selectors
 from ..observations import AntennaeArraySensor, ConcentrationSensor, WindVectorSensor
 from ..plume.gaussian import GaussianPlume
 from ..rewards import SparseGoalReward, StepPenaltyReward
@@ -111,49 +111,41 @@ def component_environment_config_to_kwargs(
     config: ComponentEnvironmentConfig | EnvironmentConfig,
 ) -> dict[str, Any]:
     """Normalize the component-style config model into explicit env kwargs."""
-    grid_size = GridSize(width=config.grid_size[0], height=config.grid_size[1])
-    goal_location = Coordinates(x=config.goal_location[0], y=config.goal_location[1])
-
-    start_location = None
-    if config.start_location:
-        start_location = Coordinates(
-            x=config.start_location[0], y=config.start_location[1]
-        )
-
-    # Create components from configs
-    action_processor = create_action_processor(config.action)
-    observation_model = create_observation_model(config.observation)
-    reward_function = create_reward_function(config.reward, goal_location)
-    concentration_field = create_concentration_field(
-        config.plume, grid_size, goal_location
-    )
-    wind_field = create_wind_field(config.wind)
-
-    return {
-        "action_processor": action_processor,
-        "observation_model": observation_model,
-        "reward_function": reward_function,
-        "concentration_field": concentration_field,
-        "wind_field": wind_field,
-        "grid_size": grid_size,
+    kwargs: dict[str, Any] = {
+        "grid_size": tuple(config.grid_size),
+        "goal_location": tuple(config.goal_location),
         "max_steps": config.max_steps,
-        "goal_location": goal_location,
         "goal_radius": config.reward.goal_radius,
-        "start_location": start_location,
+        "action_type": config.action.type,
+        "step_size": config.action.step_size,
+        "observation_type": config.observation.type,
+        "reward_type": config.reward.type,
+        "plume_sigma": config.plume.sigma,
         "render_mode": config.render_mode,
     }
+    if config.start_location is not None:
+        kwargs["start_location"] = tuple(config.start_location)
+    if config.observation.type == "wind_vector":
+        kwargs["wind_noise_std"] = float(config.observation.noise_std)
+    if config.wind is not None:
+        kwargs["enable_wind"] = True
+        kwargs["wind_direction_deg"] = config.wind.direction_deg
+        kwargs["wind_speed"] = config.wind.speed
+        if config.wind.vector is not None:
+            kwargs["wind_vector"] = tuple(config.wind.vector)
+    return kwargs
 
 
 def create_component_environment_from_config(
     config: ComponentEnvironmentConfig | EnvironmentConfig,
-) -> ComponentBasedEnvironment:
-    """Build a ComponentBasedEnvironment from the compatibility config model."""
-    return ComponentBasedEnvironment(**component_environment_config_to_kwargs(config))
+) -> Any:
+    """Build a PlumeEnv from the compatibility config model."""
+    return _create_plume_env_from_selectors(**component_environment_config_to_kwargs(config))
 
 
 def create_environment_from_config(
     config: ComponentEnvironmentConfig | EnvironmentConfig,
-) -> ComponentBasedEnvironment:
+) -> Any:
     warnings.warn(
         "create_environment_from_config is deprecated; use "
         "create_component_environment_from_config instead.",

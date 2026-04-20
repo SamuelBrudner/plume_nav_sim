@@ -18,16 +18,16 @@ Supported plume sources
 
 Select a plume source
 
-- Component factory (`create_component_environment`):
+- Selector-based construction (`make_env`):
 
   ```python
-  from plume_nav_sim.envs.factory import create_component_environment
+  import plume_nav_sim as pns
 
   # Static Gaussian (default)
-  env = create_component_environment(plume="static", plume_sigma=20.0)
+  env = pns.make_env(plume="static", plume_sigma=20.0)
 
   # Movie plume (registry-backed or direct path)
-  env = create_component_environment(
+  env = pns.make_env(
       plume="movie",
       # Option A: curated registry dataset id
       movie_dataset_id="colorado_jet_v1",
@@ -84,7 +84,7 @@ Create a dataset from a video
 
 - The resulting dataset must contain `concentration (t,y,x)` as float32 and a `manifest.json` with CLI args for provenance.
 - Contract reference: `src/backend/docs/contracts/video_plume_dataset.md`.
-- For workflows that start from a raw movie file at runtime (for example, `movie_path="my_movie.avi"` or `movie_path="my_movie.h5"` passed into `create_component_environment`), movie metadata such as `fps` and spatial calibration MUST be provided via the per‑movie YAML sidecar (`*.plume-movie.yaml`); see `src/backend/SEMANTIC_MODEL.md` for the "Movie metadata sidecar (canonical movie metadata)" section.
+- For workflows that start from a raw movie file at runtime (for example, `movie_path="my_movie.avi"` or `movie_path="my_movie.h5"` passed into `make_env(...)`), movie metadata such as `fps` and spatial calibration MUST be provided via the per‑movie YAML sidecar (`*.plume-movie.yaml`); see `src/backend/SEMANTIC_MODEL.md` for the "Movie metadata sidecar (canonical movie metadata)" section.
 - Registry-backed datasets default to `~/.cache/plume_nav_sim/data_zoo`; set `movie_cache_root` to an HPC scratch/work directory if home is constrained. Pre-stage the expected `cache_subdir/version/expected_root` from the registry and run with `movie_auto_download=False` when offline.
 
 Quick demo with the bundled movie plume

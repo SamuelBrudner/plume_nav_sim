@@ -62,18 +62,17 @@ result = r.run_episode(
 
 ## Extend It
 
-The fastest way to add your own navigation behavior is to build custom components and inject them into `ComponentBasedEnvironment`. Use `EXTENDING.md` as the researcher entry point: it shows minimal interfaces, implementation templates, and a full custom-components example.
+The fastest way to add your own navigation behavior is to build custom components and inject them into `PlumeEnv`. Use `EXTENDING.md` as the researcher entry point: it shows minimal interfaces, implementation templates, and a full custom-components example.
 
 Read: [`EXTENDING.md`](./EXTENDING.md)
 
 ## Architecture Overview
 
-`plume-nav-sim` supports two main usage modes:
+`plume-nav-sim` centers on one runtime environment:
 
-- `PlumeEnv`: standard, ready-to-run Gymnasium environment
-- `ComponentBasedEnvironment`: dependency-injected environment for custom research logic
+- `PlumeEnv`: standard Gymnasium environment that also supports direct component injection for custom research logic
 
-`ComponentBasedEnvironment` centers on three swappable components:
+`PlumeEnv` can delegate to three swappable components:
 
 - `ActionProcessor`: maps policy actions to next agent state
 - `ObservationModel`: maps environment state to observations
