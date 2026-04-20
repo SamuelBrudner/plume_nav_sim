@@ -124,6 +124,69 @@ def test_make_env_rejects_legacy_out_of_bounds_source_location():
         )
 
 
+def test_make_env_normalizes_static_plume_to_stable_plume_env():
+    env = pns.make_env(grid_size=(8, 8), source_location=(4, 4), plume="static")
+
+    try:
+        assert isinstance(env, pns.PlumeEnv)
+        _, info = env.reset(seed=5)
+        assert info["seed"] == 5
+    finally:
+        env.close()
+
+
+def test_make_env_normalizes_movie_plume_to_stable_video_env():
+    with pytest.warns(
+        DeprecationWarning,
+        match="make_env\\(plume='movie'\\) is deprecated; use plume_type='video' instead",
+    ):
+        env = pns.make_env(
+            plume="movie",
+            video_data=_make_video_data_array(),
+            max_steps=3,
+        )
+
+    try:
+        assert isinstance(env, pns.PlumeEnv)
+        obs, _ = env.reset(seed=0)
+        assert isinstance(obs, np.ndarray)
+        assert env.grid_size == (4, 5)
+        assert env.plume.frame_index == 0
+    finally:
+        env.close()
+
+
+def test_make_env_rejects_mixed_stable_and_component_kwargs():
+    with pytest.raises(
+        ValidationError,
+        match="Cannot mix deprecated component kwargs with stable PlumeEnv kwargs",
+    ):
+        pns.make_env(
+            plume="movie",
+            video_data=_make_video_data_array(),
+            action_type="discrete",
+        )
+
+
+def test_make_env_component_route_warns_and_returns_compatibility_env():
+    with pytest.warns(
+        DeprecationWarning,
+        match="routing to component environment factory",
+    ):
+        env = pns.make_env(
+            grid_size=(8, 8),
+            source_location=(4, 4),
+            action_type="discrete",
+        )
+
+    try:
+        assert not isinstance(env, pns.PlumeEnv)
+        _, info = env.reset(seed=7)
+        assert info["seed"] == 7
+    finally:
+        env.close()
+
+
 def test_make_env_legacy_info_surface_matches_default_info_keys():
     default_env = pns.make_env(grid_size=(8, 8), source_location=(4, 4))
     with warnings.catch_warnings():

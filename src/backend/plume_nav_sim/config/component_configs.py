@@ -1,3 +1,4 @@
+import warnings
 from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -8,6 +9,7 @@ __all__ = [
     "RewardConfig",
     "PlumeConfig",
     "WindConfig",
+    "ComponentEnvironmentConfig",
     "EnvironmentConfig",
 ]
 
@@ -140,7 +142,7 @@ class PlumeConfig(BaseModel):
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
-class EnvironmentConfig(BaseModel):
+class ComponentEnvironmentConfig(BaseModel):
     # Environment settings
     grid_size: tuple[int, int] = Field(
         default=(128, 128), description="Environment dimensions (width, height)"
@@ -210,3 +212,16 @@ class EnvironmentConfig(BaseModel):
             }
         },
     )
+
+
+class EnvironmentConfig(ComponentEnvironmentConfig):
+    """Deprecated compatibility alias for the component-style config model."""
+
+    def model_post_init(self, __context: Any) -> None:
+        warnings.warn(
+            "plume_nav_sim.config.EnvironmentConfig is deprecated; use "
+            "plume_nav_sim.EnvironmentConfig for the canonical env-init config or "
+            "plume_nav_sim.config.ComponentEnvironmentConfig for component compatibility.",
+            DeprecationWarning,
+            stacklevel=3,
+        )

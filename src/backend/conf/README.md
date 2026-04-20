@@ -1,6 +1,8 @@
 # Hydra Configuration Files
 
-This directory contains YAML configuration files for creating environments using [Hydra](https://hydra.cc/).
+This directory contains YAML configuration files for the component-config compatibility layer using [Hydra](https://hydra.cc/).
+For the canonical runtime config used by `PlumeEnv` and `make_env()`, prefer
+`plume_nav_sim.EnvironmentConfig`.
 
 ## Structure
 
@@ -19,16 +21,19 @@ conf/
 
 ```python
 from omegaconf import OmegaConf
-from plume_nav_sim.config import EnvironmentConfig, create_environment_from_config
+from plume_nav_sim.config import (
+    ComponentEnvironmentConfig,
+    create_component_environment_from_config,
+)
 
 # Load YAML
 cfg_dict = OmegaConf.to_container(OmegaConf.load("conf/experiment/sparse_simple.yaml"))
 
 # Parse into Pydantic model (validates!)
-config = EnvironmentConfig(**cfg_dict)
+config = ComponentEnvironmentConfig(**cfg_dict)
 
 # Create environment
-env = create_environment_from_config(config)
+env = create_component_environment_from_config(config)
 ```
 
 ### Method 2: Hydra Decorator (Recommended for Applications)
@@ -36,15 +41,18 @@ env = create_environment_from_config(config)
 ```python
 import hydra
 from omegaconf import DictConfig
-from plume_nav_sim.config import EnvironmentConfig, create_environment_from_config
+from plume_nav_sim.config import (
+    ComponentEnvironmentConfig,
+    create_component_environment_from_config,
+)
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig):
     # Convert to Pydantic (validates)
-    config = EnvironmentConfig(**cfg)
+    config = ComponentEnvironmentConfig(**cfg)
     
     # Create environment
-    env = create_environment_from_config(config)
+    env = create_component_environment_from_config(config)
     
     # Your training loop...
     obs, info = env.reset()
@@ -65,7 +73,10 @@ python train.py experiment=dense_oriented grid_size=[256,256]
 
 ```python
 from hydra import compose, initialize
-from plume_nav_sim.config import EnvironmentConfig, create_environment_from_config
+from plume_nav_sim.config import (
+    ComponentEnvironmentConfig,
+    create_component_environment_from_config,
+)
 
 with initialize(version_base=None, config_path="conf"):
     cfg = compose(config_name="config", overrides=[
@@ -74,8 +85,8 @@ with initialize(version_base=None, config_path="conf"):
         "action.step_size=2"
     ])
     
-    config = EnvironmentConfig(**cfg)
-    env = create_environment_from_config(config)
+    config = ComponentEnvironmentConfig(**cfg)
+    env = create_component_environment_from_config(config)
 ```
 
 ## Configuration Options

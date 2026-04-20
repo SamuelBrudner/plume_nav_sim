@@ -391,7 +391,7 @@ class ComponentBasedEnvironment(gym.Env):
             flat = field_array.reshape(-1)
             finite_mask = np.isfinite(flat)
             if finite_mask.any():
-                normalized_2d = self._extracted_from__render_field_grayscale_14(
+                normalized_2d = self._normalize_field_for_grayscale_render(
                     flat, finite_mask, field, field_array
                 )
             else:
@@ -400,8 +400,7 @@ class ComponentBasedEnvironment(gym.Env):
             grayscale = (np.clip(normalized_2d, 0.0, 1.0) * 255.0).astype(np.uint8)
             canvas[:, :, :] = grayscale[:, :, None]
 
-    # TODO Rename this here and in `_render_field_grayscale`
-    def _extracted_from__render_field_grayscale_14(
+    def _normalize_field_for_grayscale_render(
         self, flat, finite_mask, field, field_array
     ):
         finite_vals = flat[finite_mask]

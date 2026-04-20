@@ -318,3 +318,17 @@ def test_movie_dataset_id_unknown_has_known_id_hint(
             plume="movie",
             movie_dataset_id="missing_dataset",
         )
+
+
+def test_component_environment_rgb_render_smoke() -> None:
+    env = create_component_environment(render_mode="rgb_array")
+
+    try:
+        env.reset(seed=3)
+        frame = env.render(mode="rgb_array")
+
+        assert isinstance(frame, np.ndarray)
+        assert frame.ndim == 3
+        assert frame.shape[2] == 3
+    finally:
+        env.close()

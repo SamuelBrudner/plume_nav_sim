@@ -291,15 +291,26 @@ class MainWindow(QtWidgets.QMainWindow):
                 except (TypeError, RuntimeError):
                     pass  # Not connected — expected for optional signals
 
+    def _show_status_message(self, message: str, timeout_ms: int = 3000) -> None:
+        self.statusBar().showMessage(str(message), int(timeout_ms))
+
+    def _pause_driver_for_switch(self, driver: object) -> None:
+        if not hasattr(driver, "pause"):
+            return
+        try:
+            driver.pause()  # type: ignore[attr-defined]
+        except Exception as exc:
+            logger.warning("Pause during driver switch failed: %s", exc, exc_info=True)
+            self._show_status_message(
+                f"Driver pause failed during switch: {exc}",
+                5000,
+            )
+
     def _switch_driver(self, driver: object) -> None:
         if driver is self._active_driver:
             return
         if self._active_driver is not None:
-            try:
-                if hasattr(self._active_driver, "pause"):
-                    self._active_driver.pause()  # type: ignore[attr-defined]
-            except Exception:
-                logger.debug("Pause during driver switch failed", exc_info=True)
+            self._pause_driver_for_switch(self._active_driver)
             self._disconnect_driver(self._active_driver)
         self._active_driver = driver
         self._connect_driver(driver)
@@ -308,18 +319,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._total_reward = 0.0
         self._status.setText("t=0  reward_total=0.00  term=False trunc=False")
         if self._active_mode == "live":
-            try:
-                self.inspector.on_action_names(self.live_driver.get_action_names())
-            except Exception:
-                logger.debug("Action names update failed during driver switch", exc_info=True)
+            self.inspector.on_action_names(self.live_driver.get_action_names())
         else:
-            try:
-                if self.replay_driver.is_loaded():
-                    run_dir = getattr(self.replay_driver, "_run_dir", None)
-                    label = run_dir.name if isinstance(run_dir, Path) else "loaded run"
-                    self.controls.set_replay_label(label)
-            except Exception:
-                logger.debug("Replay label update failed", exc_info=True)
+            if self.replay_driver.is_loaded():
+                run_dir = getattr(self.replay_driver, "_run_dir", None)
+                label = run_dir.name if isinstance(run_dir, Path) else "loaded run"
+                self.controls.set_replay_label(label)
         self._refresh_timeline_controls()
         self._refresh_replay_markers()
 
@@ -411,27 +416,35 @@ class MainWindow(QtWidgets.QMainWindow):
             self._on_start_clicked()
 
     def _refresh_timeline_controls(self) -> None:
+        total = 0
+        current = 0
+        total_episodes = 0
+        current_episode = 0
+        if self._active_mode == "replay" and self.replay_driver.is_loaded():
+            total = self.replay_driver.total_steps()
+            current = self.replay_driver.current_index()
+            total_episodes = self.replay_driver.total_episodes()
+            current_episode = self.replay_driver.current_episode_index()
         try:
-            if self._active_mode == "replay" and self.replay_driver.is_loaded():
-                self.controls.set_timeline(
-                    self.replay_driver.total_steps(),
-                    self.replay_driver.current_index(),
-                    total_episodes=self.replay_driver.total_episodes(),
-                    current_episode=self.replay_driver.current_episode_index(),
-                )
-            else:
-                self.controls.set_timeline(0, 0, total_episodes=0, current_episode=0)
-        except Exception:
-            logger.debug("Timeline refresh failed", exc_info=True)
+            self.controls.set_timeline(
+                total,
+                current,
+                total_episodes=total_episodes,
+                current_episode=current_episode,
+            )
+        except RuntimeError as exc:
+            logger.warning("Timeline refresh failed: %s", exc, exc_info=True)
+            self._show_status_message(f"Timeline refresh failed: {exc}", 5000)
 
     def _refresh_replay_markers(self) -> None:
+        markers = {}
+        if self._active_mode == "replay" and self.replay_driver.is_loaded():
+            markers = self.replay_driver.get_timeline_markers()
         try:
-            if self._active_mode == "replay" and self.replay_driver.is_loaded():
-                self.controls.set_replay_markers(self.replay_driver.get_timeline_markers())
-            else:
-                self.controls.set_replay_markers({})
-        except Exception:
-            logger.debug("Replay marker refresh failed", exc_info=True)
+            self.controls.set_replay_markers(markers)
+        except RuntimeError as exc:
+            logger.warning("Replay marker refresh failed: %s", exc, exc_info=True)
+            self._show_status_message(f"Replay marker refresh failed: {exc}", 5000)
 
     @QtCore.Slot(object)
     def _on_step_event(self, ev) -> None:
@@ -452,7 +465,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot()
     def _on_episode_finished(self) -> None:
-        self.statusBar().showMessage("Episode finished", 3000)
+        self._show_status_message("Episode finished", 3000)
         # keep last metrics displayed; allow restart
 
     @QtCore.Slot(int)
@@ -482,7 +495,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_driver_error(self, message: str) -> None:
         msg = str(message).strip() or "Unknown error"
         logger.warning("Driver error: %s", msg)
-        self.statusBar().showMessage(msg, 6000)
+        self._show_status_message(msg, 6000)
 
     @QtCore.Slot(object)
     def _on_replay_validation_failed(self, payload: object) -> None:
@@ -499,7 +512,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if str(mode).lower().startswith("replay"):
             self._switch_driver(self.replay_driver)
             if not self.replay_driver.is_loaded():
-                self.statusBar().showMessage(
+                self._show_status_message(
                     "Replay mode: load artifacts to begin playback", 2500
                 )
         else:
@@ -576,7 +589,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             logger.debug("Old driver deleteLater failed", exc_info=True)
 
-        self.statusBar().showMessage("Applied live config", 2000)
+        self._show_status_message("Applied live config", 2000)
 
     @QtCore.Slot()
     def _on_load_replay(self) -> None:
@@ -660,20 +673,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot(int, int)
     def _on_timeline_changed(self, current: int, total: int) -> None:
+        total_eps = 0
+        cur_ep = 0
+        if self._active_mode == "replay" and self.replay_driver.is_loaded():
+            total_eps = self.replay_driver.total_episodes()
+            cur_ep = self.replay_driver.current_episode_index()
         try:
-            total_eps = 0
-            cur_ep = 0
-            if self._active_mode == "replay" and self.replay_driver.is_loaded():
-                total_eps = self.replay_driver.total_episodes()
-                cur_ep = self.replay_driver.current_episode_index()
             self.controls.set_timeline(
                 total,
                 current,
                 total_episodes=total_eps,
                 current_episode=cur_ep,
             )
-        except Exception:
-            logger.debug("Timeline change handler failed", exc_info=True)
+        except RuntimeError as exc:
+            logger.warning("Timeline change handler failed: %s", exc, exc_info=True)
+            self._show_status_message(f"Timeline update failed: {exc}", 5000)
 
     def _load_replay_from_path(self, path: Path) -> None:
         self._total_reward = 0.0
@@ -683,11 +697,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self.replay_driver.load_run(path)
         except ReplayLoadError as exc:  # pragma: no cover - UI safety
             self._switch_driver(self.live_driver)
-            self.statusBar().showMessage(f"Replay load failed: {exc}", 5000)
+            self._show_status_message(f"Replay load failed: {exc}", 5000)
             return
         except Exception as exc:  # pragma: no cover - UI safety
             self._switch_driver(self.live_driver)
-            self.statusBar().showMessage(f"Replay load error: {exc}", 5000)
+            logger.exception("Unexpected replay load error")
+            self._show_status_message(f"Replay load error: {exc}", 5000)
             return
         # Switch into replay mode and surface metadata
         try:
@@ -697,7 +712,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._switch_driver(self.replay_driver)
         run_dir = Path(path)
         self.controls.set_replay_label(run_dir.name)
-        self.statusBar().showMessage(f"Loaded replay from {run_dir}", 3000)
+        self._show_status_message(f"Loaded replay from {run_dir}", 3000)
         try:
             self.replay_config_widget.set_payload(
                 self.replay_driver.get_resolved_replay_config()

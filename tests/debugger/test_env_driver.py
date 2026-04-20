@@ -167,3 +167,68 @@ def test_recreate_env_aborts_when_preview_reset_fails(
     assert messages[-1] == "Reset failed after env recreation: reset boom"
     assert driver._iter is None
     assert stream_calls == []
+
+
+def test_initialize_and_recreate_share_env_build_kwargs(
+    monkeypatch,
+    qapp: QtWidgets.QApplication,  # noqa: ARG001
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def _fake_make_env(**kwargs):
+        calls.append(dict(kwargs))
+        return _WorkingEnv()
+
+    monkeypatch.setattr("plume_nav_sim.make_env", _fake_make_env)
+    monkeypatch.setattr(
+        "plume_nav_sim.runner.runner.stream",
+        lambda *args, **kwargs: iter(()),
+    )
+    monkeypatch.setattr(
+        "plume_nav_debugger.frame_overlays.OverlayInfoWrapper",
+        lambda env: env,
+        raising=False,
+    )
+
+    driver = EnvDriver(
+        DebuggerConfig(
+            action_type="discrete",
+            plume="movie",
+            movie_dataset_id="colorado_jet_v1",
+            movie_auto_download=True,
+            movie_cache_root="/tmp/plume-cache",
+            movie_fps=12.5,
+            movie_step_policy="clamp",
+            movie_h5_dataset="field",
+            movie_normalize="frame",
+            movie_chunks="auto",
+        )
+    )
+
+    driver.initialize()
+    driver._recreate_env((3, 4))
+
+    assert len(calls) == 2
+    initialize_kwargs, recreate_kwargs = calls
+    assert initialize_kwargs == {
+        "grid_size": (64, 64),
+        "goal_radius": 1.0,
+        "plume_sigma": 20.0,
+        "max_steps": 500,
+        "render_mode": "rgb_array",
+        "action_type": "discrete",
+        "observation_type": "concentration",
+        "reward_type": "step_penalty",
+        "plume": "movie",
+        "movie_dataset_id": "colorado_jet_v1",
+        "movie_auto_download": True,
+        "movie_cache_root": "/tmp/plume-cache",
+        "movie_fps": 12.5,
+        "movie_step_policy": "clamp",
+        "movie_h5_dataset": "field",
+        "movie_normalize": "frame",
+        "movie_chunks": "auto",
+    }
+    expected_recreate_kwargs = dict(initialize_kwargs)
+    expected_recreate_kwargs["start_location"] = (3, 4)
+    assert recreate_kwargs == expected_recreate_kwargs

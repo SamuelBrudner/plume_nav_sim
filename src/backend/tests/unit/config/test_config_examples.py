@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from plume_nav_sim.config.component_configs import EnvironmentConfig
+from plume_nav_sim.config.component_configs import ComponentEnvironmentConfig
 
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
@@ -35,7 +35,7 @@ def test_base_config_yaml_matches_environment_config_model() -> None:
     loaded = _load_yaml(BASE_CONFIG)
     loaded.pop("defaults", None)
 
-    validated = EnvironmentConfig.model_validate(loaded)
+    validated = ComponentEnvironmentConfig.model_validate(loaded)
 
     assert validated.reward.goal_reward == 1.0
     assert validated.reward.step_penalty == 0.01
@@ -44,7 +44,7 @@ def test_base_config_yaml_matches_environment_config_model() -> None:
 def test_step_penalty_experiment_yaml_matches_environment_config_model() -> None:
     loaded = _load_yaml(STEP_PENALTY_EXPERIMENT)
 
-    validated = EnvironmentConfig.model_validate(loaded)
+    validated = ComponentEnvironmentConfig.model_validate(loaded)
 
     assert validated.reward.goal_reward == 10.0
     assert validated.reward.step_penalty == 0.01

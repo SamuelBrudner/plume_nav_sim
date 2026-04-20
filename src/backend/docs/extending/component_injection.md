@@ -99,15 +99,21 @@ env = ComponentBasedEnvironment(
 
 ## Config-Driven Creation
 
-Use factories and Pydantic configs for reproducible experiments:
+Use the component-config compatibility layer for reproducible component-injection experiments.
+For the canonical runtime config used by `PlumeEnv` and `make_env()`, prefer
+`plume_nav_sim.EnvironmentConfig`.
 
 ```python
-from plume_nav_sim.config.factories import create_environment_from_config
+from plume_nav_sim.config.factories import create_component_environment_from_config
 from plume_nav_sim.config.component_configs import (
-    ActionConfig, ObservationConfig, RewardConfig, PlumeConfig, EnvironmentConfig,
+    ActionConfig,
+    ComponentEnvironmentConfig,
+    ObservationConfig,
+    PlumeConfig,
+    RewardConfig,
 )
 
-config = EnvironmentConfig(
+config = ComponentEnvironmentConfig(
     grid_size=(128, 128),
     goal_location=(64, 64),
     max_steps=1000,
@@ -117,7 +123,7 @@ config = EnvironmentConfig(
     plume=PlumeConfig(sigma=20.0, enable_caching=True, normalize=True),
 )
 
-env = create_environment_from_config(config)
+env = create_component_environment_from_config(config)
 ```
 
 See also (external plug‑and‑play, config‑based DI):

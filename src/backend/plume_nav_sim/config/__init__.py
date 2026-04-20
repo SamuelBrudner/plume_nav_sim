@@ -1,5 +1,9 @@
+"""Compatibility-heavy config helpers plus the canonical env-config constructor."""
+
+from ..envs.config_types import create_environment_config
 from .component_configs import (
     ActionConfig,
+    ComponentEnvironmentConfig,
     EnvironmentConfig,
     ObservationConfig,
     PlumeConfig,
@@ -17,10 +21,16 @@ from .composition import (
     prepare,
     reset_policy_if_possible,
 )
-from .defaults import get_complete_default_config, get_default_environment_config
+from .defaults import (
+    get_complete_default_config,
+    get_default_component_environment_config,
+    get_default_environment_config,
+)
 from .factories import (
+    component_environment_config_to_kwargs,
     create_action_processor,
     create_concentration_field,
+    create_component_environment_from_config,
     create_environment_from_config,
     create_observation_model,
     create_reward_function,
@@ -50,17 +60,22 @@ __all__ = [
     "RewardConfig",
     "PlumeConfig",
     "WindConfig",
+    "ComponentEnvironmentConfig",
     "EnvironmentConfig",
+    "create_environment_config",
     # Factory functions
     "create_action_processor",
     "create_observation_model",
     "create_reward_function",
     "create_concentration_field",
     "create_wind_field",
+    "component_environment_config_to_kwargs",
+    "create_component_environment_from_config",
     "create_environment_from_config",
     # Defaults
     "get_complete_default_config",
     "get_default_environment_config",
+    "get_default_component_environment_config",
     # Composition helpers and specs
     "BuiltinPolicyName",
     "LoadedPolicy",

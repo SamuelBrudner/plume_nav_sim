@@ -8,6 +8,7 @@ from typing import Any, Optional
 import numpy as np
 
 logger = logging.getLogger(__name__)
+_KEEP_START_LOCATION = object()
 
 try:
     from PySide6 import QtCore
@@ -215,6 +216,96 @@ class EnvDriver(QtCore.QObject):
             return self._policy
         return self._make_default_policy()
 
+    def _normalized_action_type(self) -> str:
+        action_type = str(getattr(self.config, "action_type", "oriented") or "oriented")
+        action_type = action_type.strip().lower()
+        if action_type not in {"discrete", "oriented", "run_tumble"}:
+            action_type = "oriented"
+        self.config.action_type = action_type
+        return action_type
+
+    def _uses_movie_plume(self) -> bool:
+        return (
+            str(getattr(self.config, "plume", "static")).lower() == "movie"
+            or bool(self.config.movie_path)
+            or bool(self.config.movie_dataset_id)
+        )
+
+    def _build_env_kwargs(
+        self,
+        *,
+        start_location: object = _KEEP_START_LOCATION,
+    ) -> dict[str, Any]:
+        action_type = self._normalized_action_type()
+        kwargs: dict[str, Any] = {
+            "grid_size": self.config.grid_size,
+            "goal_radius": self.config.goal_radius,
+            "plume_sigma": self.config.plume_sigma,
+            "max_steps": self.config.max_steps,
+            "render_mode": "rgb_array",
+            "action_type": action_type,
+            "observation_type": "concentration",
+            "reward_type": "step_penalty",
+        }
+
+        resolved_start = self.config.start_location
+        if start_location is not _KEEP_START_LOCATION:
+            if start_location is None:
+                resolved_start = None
+            else:
+                resolved_start = (int(start_location[0]), int(start_location[1]))  # type: ignore[index]
+            self.config.start_location = resolved_start
+
+        if resolved_start is not None:
+            kwargs["start_location"] = tuple(resolved_start)
+
+        if self._uses_movie_plume():
+            kwargs["plume"] = "movie"
+            if self.config.movie_path:
+                kwargs["movie_path"] = self.config.movie_path
+            if self.config.movie_dataset_id:
+                kwargs["movie_dataset_id"] = self.config.movie_dataset_id
+            kwargs["movie_auto_download"] = bool(self.config.movie_auto_download)
+            if self.config.movie_cache_root:
+                kwargs["movie_cache_root"] = self.config.movie_cache_root
+            if self.config.movie_fps is not None:
+                kwargs["movie_fps"] = float(self.config.movie_fps)
+            if self.config.movie_step_policy:
+                kwargs["movie_step_policy"] = str(self.config.movie_step_policy)
+            if self.config.movie_h5_dataset:
+                kwargs["movie_h5_dataset"] = self.config.movie_h5_dataset
+            if self.config.movie_normalize is not None:
+                kwargs["movie_normalize"] = self.config.movie_normalize
+            if self.config.movie_chunks is not None:
+                kwargs["movie_chunks"] = self.config.movie_chunks
+
+        return kwargs
+
+    def _wrap_env_with_overlays(self, env: Any) -> Any:
+        try:
+            from .frame_overlays import OverlayInfoWrapper
+
+            return OverlayInfoWrapper(env)
+        except Exception:
+            logger.debug("Overlay wrapper unavailable; continuing without overlays", exc_info=True)
+            return env
+
+    def _create_env(self, *, start_location: object = _KEEP_START_LOCATION) -> Any:
+        import plume_nav_sim as pns
+
+        env = pns.make_env(**self._build_env_kwargs(start_location=start_location))
+        return self._wrap_env_with_overlays(env)
+
+    def _refresh_provider_mux(self, *, context: str) -> None:
+        try:
+            from plume_nav_debugger.odc.mux import ProviderMux
+
+            self._mux = ProviderMux(self._env, self._policy)
+            self.provider_mux_changed.emit(self._mux)
+        except Exception as exc:
+            logger.warning("ProviderMux creation failed %s: %s", context, exc, exc_info=True)
+            self._mux = None
+
     def _reset_control_state(self, seed: Optional[int], *, context: str) -> None:
         try:
             if self._controller is not None and hasattr(self._controller, "reset"):
@@ -271,62 +362,12 @@ class EnvDriver(QtCore.QObject):
             return False
 
     def initialize(self) -> None:
-        import plume_nav_sim as pns
-
         from .controllable_policy import ControllablePolicy
 
-        action_type = str(getattr(self.config, "action_type", "oriented") or "oriented")
-        action_type = action_type.strip().lower()
-        if action_type not in {"discrete", "oriented", "run_tumble"}:
-            action_type = "oriented"
-        self.config.action_type = action_type
-
         self._clear_history()
-        kwargs = {
-            "grid_size": self.config.grid_size,
-            "goal_radius": self.config.goal_radius,
-            "plume_sigma": self.config.plume_sigma,
-            "max_steps": self.config.max_steps,
-            "render_mode": "rgb_array",
-            "action_type": action_type,
-            "observation_type": "concentration",
-            "reward_type": "step_penalty",
-        }
-        if self.config.start_location is not None:
-            kwargs["start_location"] = tuple(self.config.start_location)
-
-        if (
-            str(getattr(self.config, "plume", "static")).lower() == "movie"
-            or self.config.movie_path
-            or self.config.movie_dataset_id
-        ):
-            kwargs["plume"] = "movie"
-            if self.config.movie_path:
-                kwargs["movie_path"] = self.config.movie_path
-            if self.config.movie_dataset_id:
-                kwargs["movie_dataset_id"] = self.config.movie_dataset_id
-            kwargs["movie_auto_download"] = bool(self.config.movie_auto_download)
-            if self.config.movie_cache_root:
-                kwargs["movie_cache_root"] = self.config.movie_cache_root
-            if self.config.movie_fps is not None:
-                kwargs["movie_fps"] = float(self.config.movie_fps)
-            if self.config.movie_step_policy:
-                kwargs["movie_step_policy"] = str(self.config.movie_step_policy)
-            if self.config.movie_h5_dataset:
-                kwargs["movie_h5_dataset"] = self.config.movie_h5_dataset
-            if self.config.movie_normalize is not None:
-                kwargs["movie_normalize"] = self.config.movie_normalize
-            if self.config.movie_chunks is not None:
-                kwargs["movie_chunks"] = self.config.movie_chunks
-
+        action_type = self._normalized_action_type()
         try:
-            self._env = pns.make_env(**kwargs)
-            try:
-                from .frame_overlays import OverlayInfoWrapper
-
-                self._env = OverlayInfoWrapper(self._env)
-            except Exception:
-                logger.debug("Overlay wrapper unavailable; continuing without overlays", exc_info=True)
+            self._env = self._create_env()
         except Exception as exc:
             self._env = None
             self._policy = None
@@ -376,22 +417,15 @@ class EnvDriver(QtCore.QObject):
         ):
             return
         # Build ProviderMux and announce action names after env/policy ready
-        try:
-            from plume_nav_debugger.odc.mux import ProviderMux
-
-            self._mux = ProviderMux(self._env, self._policy)
-            self.provider_mux_changed.emit(self._mux)
-            # Structured one-time warning if no provider detected
-            if not getattr(self, "_warned_no_provider", False):
-                if hasattr(self._mux, "has_provider") and not self._mux.has_provider():  # type: ignore[attr-defined]
-                    logger.warning(
-                        "No DebuggerProvider detected; inspector will show limited information. "
-                        "Implement an ODC provider for action labels, distributions, and pipeline."
-                    )
-                    self._warned_no_provider = True
-        except Exception as exc:
-            logger.warning("ProviderMux creation failed: %s", exc, exc_info=True)
-            self._mux = None
+        self._refresh_provider_mux(context="during initialization")
+        # Structured one-time warning if no provider detected
+        if self._mux is not None and not getattr(self, "_warned_no_provider", False):
+            if hasattr(self._mux, "has_provider") and not self._mux.has_provider():  # type: ignore[attr-defined]
+                logger.warning(
+                    "No DebuggerProvider detected; inspector will show limited information. "
+                    "Implement an ODC provider for action labels, distributions, and pipeline."
+                )
+                self._warned_no_provider = True
         self._emit_action_space_changed()
         try:
             self.policy_changed.emit(self._policy)
@@ -647,14 +681,7 @@ class EnvDriver(QtCore.QObject):
         if was_running and resume:
             self.start(self.get_interval_ms())
         # Rebuild ProviderMux and announce action space after policy change
-        try:
-            from plume_nav_debugger.odc.mux import ProviderMux
-
-            self._mux = ProviderMux(self._env, self._policy)
-            self.provider_mux_changed.emit(self._mux)
-        except Exception as exc:
-            logger.warning("ProviderMux creation failed after policy swap: %s", exc, exc_info=True)
-            self._mux = None
+        self._refresh_provider_mux(context="after policy swap")
         self._emit_action_space_changed()
         try:
             self.policy_changed.emit(self._policy)
@@ -673,8 +700,6 @@ class EnvDriver(QtCore.QObject):
             self.start(self.get_interval_ms())
 
     def _recreate_env(self, start_location: Optional[tuple[int, int]]) -> None:
-        import plume_nav_sim as pns
-
         # Close old env if present
         try:
             if self._env is not None and hasattr(self._env, "close"):
@@ -682,61 +707,8 @@ class EnvDriver(QtCore.QObject):
         except Exception:
             logger.debug("Old env close failed during recreation", exc_info=True)
 
-        # Build new env with same config, injecting start_location when provided
-        action_type = str(getattr(self.config, "action_type", "oriented") or "oriented")
-        action_type = action_type.strip().lower()
-        if action_type not in {"discrete", "oriented", "run_tumble"}:
-            action_type = "oriented"
-        self.config.action_type = action_type
-
-        kwargs = {
-            "grid_size": self.config.grid_size,
-            "goal_radius": self.config.goal_radius,
-            "plume_sigma": self.config.plume_sigma,
-            "max_steps": self.config.max_steps,
-            "render_mode": "rgb_array",
-            "action_type": action_type,
-            "observation_type": "concentration",
-            "reward_type": "step_penalty",
-        }
-        if start_location is not None:
-            kwargs["start_location"] = tuple(start_location)
-            self.config.start_location = tuple(start_location)
-        else:
-            self.config.start_location = None
-
-        if (
-            str(getattr(self.config, "plume", "static")).lower() == "movie"
-            or self.config.movie_path
-            or self.config.movie_dataset_id
-        ):
-            kwargs["plume"] = "movie"
-            if self.config.movie_path:
-                kwargs["movie_path"] = self.config.movie_path
-            if self.config.movie_dataset_id:
-                kwargs["movie_dataset_id"] = self.config.movie_dataset_id
-            kwargs["movie_auto_download"] = bool(self.config.movie_auto_download)
-            if self.config.movie_cache_root:
-                kwargs["movie_cache_root"] = self.config.movie_cache_root
-            if self.config.movie_fps is not None:
-                kwargs["movie_fps"] = float(self.config.movie_fps)
-            if self.config.movie_step_policy:
-                kwargs["movie_step_policy"] = str(self.config.movie_step_policy)
-            if self.config.movie_h5_dataset:
-                kwargs["movie_h5_dataset"] = self.config.movie_h5_dataset
-            if self.config.movie_normalize is not None:
-                kwargs["movie_normalize"] = self.config.movie_normalize
-            if self.config.movie_chunks is not None:
-                kwargs["movie_chunks"] = self.config.movie_chunks
-
         try:
-            self._env = pns.make_env(**kwargs)
-            try:
-                from .frame_overlays import OverlayInfoWrapper
-
-                self._env = OverlayInfoWrapper(self._env)
-            except Exception:
-                logger.debug("Overlay wrapper unavailable during recreation", exc_info=True)
+            self._env = self._create_env(start_location=start_location)
         except Exception as exc:
             self._env = None
             self._iter = None
@@ -772,14 +744,7 @@ class EnvDriver(QtCore.QObject):
         ):
             return
         # Rebuild ProviderMux and emit names
-        try:
-            from plume_nav_debugger.odc.mux import ProviderMux
-
-            self._mux = ProviderMux(self._env, self._policy)
-            self.provider_mux_changed.emit(self._mux)
-        except Exception as exc:
-            logger.warning("ProviderMux creation failed during recreation: %s", exc, exc_info=True)
-            self._mux = None
+        self._refresh_provider_mux(context="during recreation")
         self._emit_action_space_changed()
 
     def set_manual_action(self, action: int, *, sticky: bool = False) -> None:

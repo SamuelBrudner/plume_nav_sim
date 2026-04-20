@@ -1,3 +1,6 @@
+import warnings
+from typing import Any
+
 from ..actions import DiscreteGridActions, OrientedGridActions, OrientedRunTumbleActions
 from ..core.geometry import Coordinates, GridSize
 from ..envs import ComponentBasedEnvironment
@@ -7,6 +10,7 @@ from ..rewards import SparseGoalReward, StepPenaltyReward
 from ..wind_field import ConstantWindField
 from .component_configs import (
     ActionConfig,
+    ComponentEnvironmentConfig,
     EnvironmentConfig,
     ObservationConfig,
     PlumeConfig,
@@ -20,6 +24,8 @@ __all__ = [
     "create_reward_function",
     "create_concentration_field",
     "create_wind_field",
+    "component_environment_config_to_kwargs",
+    "create_component_environment_from_config",
     "create_environment_from_config",
 ]
 
@@ -101,10 +107,10 @@ def create_wind_field(config: WindConfig | None):
     )
 
 
-def create_environment_from_config(
-    config: EnvironmentConfig,
-) -> ComponentBasedEnvironment:
-    # Convert tuples to proper types
+def component_environment_config_to_kwargs(
+    config: ComponentEnvironmentConfig | EnvironmentConfig,
+) -> dict[str, Any]:
+    """Normalize the component-style config model into explicit env kwargs."""
     grid_size = GridSize(width=config.grid_size[0], height=config.grid_size[1])
     goal_location = Coordinates(x=config.goal_location[0], y=config.goal_location[1])
 
@@ -123,17 +129,35 @@ def create_environment_from_config(
     )
     wind_field = create_wind_field(config.wind)
 
-    # Assemble environment
-    return ComponentBasedEnvironment(
-        action_processor=action_processor,
-        observation_model=observation_model,
-        reward_function=reward_function,
-        concentration_field=concentration_field,
-        wind_field=wind_field,
-        grid_size=grid_size,
-        max_steps=config.max_steps,
-        goal_location=goal_location,
-        goal_radius=config.reward.goal_radius,
-        start_location=start_location,
-        render_mode=config.render_mode,
+    return {
+        "action_processor": action_processor,
+        "observation_model": observation_model,
+        "reward_function": reward_function,
+        "concentration_field": concentration_field,
+        "wind_field": wind_field,
+        "grid_size": grid_size,
+        "max_steps": config.max_steps,
+        "goal_location": goal_location,
+        "goal_radius": config.reward.goal_radius,
+        "start_location": start_location,
+        "render_mode": config.render_mode,
+    }
+
+
+def create_component_environment_from_config(
+    config: ComponentEnvironmentConfig | EnvironmentConfig,
+) -> ComponentBasedEnvironment:
+    """Build a ComponentBasedEnvironment from the compatibility config model."""
+    return ComponentBasedEnvironment(**component_environment_config_to_kwargs(config))
+
+
+def create_environment_from_config(
+    config: ComponentEnvironmentConfig | EnvironmentConfig,
+) -> ComponentBasedEnvironment:
+    warnings.warn(
+        "create_environment_from_config is deprecated; use "
+        "create_component_environment_from_config instead.",
+        DeprecationWarning,
+        stacklevel=2,
     )
+    return create_component_environment_from_config(config)
