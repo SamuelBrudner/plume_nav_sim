@@ -13,6 +13,7 @@ from PySide6 import QtWidgets  # noqa: E402
 from plume_nav_debugger.replay_driver import ReplayDriver  # noqa: E402
 from plume_nav_debugger.widgets.control_bar import ControlBar  # noqa: E402
 from plume_nav_sim.cli import capture  # noqa: E402
+from plume_nav_sim.data_capture import load_replay_engine  # noqa: E402
 from plume_nav_sim.data_capture.loader import load_replay_artifacts  # noqa: E402
 
 
@@ -139,3 +140,32 @@ def test_replay_driver_loads_real_capture_run(
     assert driver.total_steps() == len(artifacts.steps)
     assert driver.total_episodes() == len(artifacts.episodes)
     assert driver.current_index() == 0
+
+
+def test_replay_engine_exposes_episode_boundaries(tmp_path: Path) -> None:
+    output_root = tmp_path / "results"
+    rc = capture.main(
+        [
+            "--output",
+            str(output_root),
+            "--experiment",
+            "engine-boundaries",
+            "--episodes",
+            "2",
+            "--grid",
+            "8x8",
+            "--max-steps",
+            "2",
+            "--seed",
+            "50",
+        ]
+    )
+    assert rc == 0
+
+    run_dir = _latest_run_dir(output_root, "engine-boundaries")
+    engine = load_replay_engine(str(run_dir))
+
+    assert engine.steps
+    assert len(engine.episode_starts) == engine.total_episodes()
+    assert engine.episode_starts[0] == 0
+    assert engine.run_dir == str(run_dir)

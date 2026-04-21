@@ -16,6 +16,7 @@ try:
     from plume_nav_sim.data_capture.replay import ReplayConsistencyError
     from plume_nav_sim.data_capture.replay import ReplayStepEvent as _ReplayStepEvent
     from plume_nav_sim.data_capture.replay import load_replay_engine
+    from plume_nav_sim.data_capture.schemas import RunMeta
 except Exception as e:  # pragma: no cover - optional dependency guard
     raise RuntimeError(
         "Replay support requires plume_nav_sim.data_capture.replay to be importable."
@@ -43,6 +44,34 @@ class ReplayDriver(QtCore.QObject):
         self._last_event: object | None = None
         self._last_validation_diff: object | None = None
 
+    def _build_replay_env(self, *, render: bool) -> object:
+        import plume_nav_sim as pns
+
+        kwargs = self.get_resolved_env_kwargs(render=render)
+        return pns.make_env(**kwargs)
+
+    def _emit_validation_failure(self, exc: ReplayConsistencyError) -> None:
+        self.error_occurred.emit(str(exc))
+        diff = getattr(exc, "diff", None)
+        if diff is None:
+            return
+        payload = diff.to_dict() if hasattr(diff, "to_dict") else diff
+        self._last_validation_diff = payload
+        self.replay_validation_failed.emit(payload)
+
+    def _load_events(self) -> None:
+        if self._engine is None:
+            self._events = []
+            self._episode_starts = []
+            return
+        self._events = list(self._engine.iter_events(start_index=0, render=True))
+        self._episode_starts = list(self._engine.episode_starts)
+
+    def _reset_playback_state(self) -> None:
+        self._index = 0
+        self._running = False
+        self._timer.stop()
+
     def load_run(self, run_dir: str | Path) -> None:
         run_path = Path(run_dir)
         self._engine = load_replay_engine(str(run_path))
@@ -51,41 +80,18 @@ class ReplayDriver(QtCore.QObject):
 
         # Best-effort: validate by reconstructing and stepping the environment.
         try:
-            import plume_nav_sim as pns
-
-            def _factory(_meta: object, render: bool) -> object:
-                kwargs = self.get_resolved_env_kwargs(render=render)
-                return pns.make_env(**kwargs)
-
-            self._engine.validate(env_factory=_factory, render=False)
+            self._engine.validate(
+                env_factory=lambda _meta, render: self._build_replay_env(render=render),
+                render=False,
+            )
         except ReplayConsistencyError as exc:
-            self.error_occurred.emit(str(exc))
-            diff = getattr(exc, "diff", None)
-            if diff is not None:
-                payload = diff.to_dict() if hasattr(diff, "to_dict") else diff
-                self._last_validation_diff = payload
-                self.replay_validation_failed.emit(payload)
+            self._emit_validation_failure(exc)
         except Exception as exc:
             # Validation is optional; failure should be visible but not block playback.
             self.error_occurred.emit(f"Replay validation skipped: {exc}")
 
-        # Materialize events once so seeking and reverse stepping is trivial.
-        self._events = list(self._engine.iter_events(start_index=0, render=True))
-        self._index = 0
-        self._running = False
-        self._timer.stop()
-
-        self._episode_starts = []
-        try:
-            # Derive episode boundaries from recorded episode_id transitions
-            last_id: str | None = None
-            for i, rec in enumerate(self._engine._artifacts.steps):  # type: ignore[attr-defined]
-                if last_id is None or rec.episode_id != last_id:
-                    self._episode_starts.append(i)
-                    last_id = rec.episode_id
-        except Exception:
-            self._episode_starts = [0] if self._events else []
-
+        self._load_events()
+        self._reset_playback_state()
         self.seek_to(0, auto_emit=True)
 
     def is_loaded(self) -> bool:
@@ -97,10 +103,7 @@ class ReplayDriver(QtCore.QObject):
     def total_episodes(self) -> int:
         if self._engine is None:
             return len(self._episode_starts)
-        try:
-            return self._engine.total_episodes()
-        except Exception:
-            return len(self._episode_starts)
+        return self._engine.total_episodes()
 
     def current_index(self) -> int:
         return self._index
@@ -193,12 +196,57 @@ class ReplayDriver(QtCore.QObject):
             return None
         start = min(max(int(self._index) + 1, 0), len(self._events))
         for i in range(start, len(self._events)):
-            try:
-                if pred(self._events[i]):
-                    return i
-            except Exception:
-                continue
+            if pred(self._events[i]):
+                return i
         return None
+
+    @staticmethod
+    def _coerce_int_pair(value: object) -> tuple[int, int] | None:
+        if not isinstance(value, (tuple, list)) or len(value) != 2:
+            return None
+        try:
+            return int(value[0]), int(value[1])
+        except Exception:
+            return None
+
+    @staticmethod
+    def _coerce_float_pair(value: object) -> tuple[float, float] | None:
+        if not isinstance(value, (tuple, list)) or len(value) != 2:
+            return None
+        try:
+            return float(value[0]), float(value[1])
+        except Exception:
+            return None
+
+    def _run_meta(self) -> RunMeta | None:
+        if self._engine is None:
+            return None
+        return self._engine.run_meta
+
+    def _env_config(self) -> dict[str, Any]:
+        meta = self._run_meta()
+        if meta is None or not isinstance(meta.env_config, dict):
+            return {}
+        return meta.env_config
+
+    def _extra_config(self) -> dict[str, Any]:
+        meta = self._run_meta()
+        if meta is None or not isinstance(meta.extra, dict):
+            return {}
+        return meta.extra
+
+    def _infer_action_type(self) -> str:
+        if self._engine is None:
+            return "oriented"
+        steps = self._engine.steps
+        if not steps:
+            return "oriented"
+        max_action = max(int(rec.action) for rec in steps)
+        if max_action >= 3:
+            return "discrete"
+        if max_action == 2:
+            return "oriented"
+        return "oriented"
 
     def _is_goal_reached(self, ev: object) -> bool:
         info = getattr(ev, "info", None)
@@ -261,64 +309,45 @@ class ReplayDriver(QtCore.QObject):
         return []
 
     def get_grid_size(self) -> tuple[int, int]:
-        if self._engine is None:
-            return (0, 0)
-        cfg = getattr(self._engine.run_meta, "env_config", None)
-        if isinstance(cfg, dict):
-            grid = cfg.get("grid_size")
-            if isinstance(grid, (tuple, list)) and len(grid) == 2:
-                try:
-                    return int(grid[0]), int(grid[1])
-                except Exception:
-                    return (0, 0)
-        return (0, 0)
+        grid = self._coerce_int_pair(self._env_config().get("grid_size"))
+        return grid if grid is not None else (0, 0)
 
     def get_overlay_context(self) -> dict[str, Any]:
         ctx: dict[str, Any] = {}
-        if self._engine is None:
-            return ctx
-        cfg = getattr(self._engine.run_meta, "env_config", None)
-        if isinstance(cfg, dict):
-            with contextlib.suppress(Exception):
-                if "source_location" in cfg:
-                    ctx["source_xy"] = cfg.get("source_location")
-            with contextlib.suppress(Exception):
-                if "goal_radius" in cfg:
-                    ctx["goal_radius"] = cfg.get("goal_radius")
+        cfg = self._env_config()
+        if "source_location" in cfg:
+            ctx["source_xy"] = cfg.get("source_location")
+        if "goal_radius" in cfg:
+            ctx["goal_radius"] = cfg.get("goal_radius")
         return ctx
 
     def last_event(self):
         return self._last_event
 
     def get_resolved_env_kwargs(self, *, render: bool = False) -> dict[str, Any]:
-        if self._engine is None:
+        env_cfg = self._env_config()
+        extra = self._extra_config()
+        if not env_cfg and self._engine is None:
             return {}
-
-        meta = getattr(self._engine, "run_meta", None)
-        if meta is None:
-            return {}
-
-        env_cfg = meta.env_config if isinstance(getattr(meta, "env_config", None), dict) else {}
-        extra = meta.extra if isinstance(getattr(meta, "extra", None), dict) else {}
 
         kwargs: dict[str, Any] = {}
 
-        grid = env_cfg.get("grid_size")
-        if isinstance(grid, (tuple, list)) and len(grid) == 2:
-            with contextlib.suppress(Exception):
-                kwargs["grid_size"] = (int(grid[0]), int(grid[1]))
+        grid = self._coerce_int_pair(env_cfg.get("grid_size"))
+        if grid is not None:
+            kwargs["grid_size"] = grid
 
-        src = env_cfg.get("source_location")
-        if isinstance(src, (tuple, list)) and len(src) == 2:
-            with contextlib.suppress(Exception):
-                kwargs["source_location"] = (int(src[0]), int(src[1]))
+        src = self._coerce_int_pair(env_cfg.get("source_location"))
+        if src is not None:
+            kwargs["source_location"] = src
 
-        with contextlib.suppress(Exception):
-            if env_cfg.get("max_steps") is not None:
-                kwargs["max_steps"] = int(env_cfg["max_steps"])
-        with contextlib.suppress(Exception):
-            if env_cfg.get("goal_radius") is not None:
-                kwargs["goal_radius"] = float(env_cfg["goal_radius"])
+        max_steps = env_cfg.get("max_steps")
+        if max_steps is not None:
+            with contextlib.suppress(Exception):
+                kwargs["max_steps"] = int(max_steps)
+        goal_radius = env_cfg.get("goal_radius")
+        if goal_radius is not None:
+            with contextlib.suppress(Exception):
+                kwargs["goal_radius"] = float(goal_radius)
 
         plume_params = env_cfg.get("plume_params")
         if isinstance(plume_params, dict):
@@ -336,23 +365,7 @@ class ReplayDriver(QtCore.QObject):
                     kwargs[key] = env_extra[key]
         else:
             # No captured env group: best-effort inference to recreate manual capture runs.
-            action_type = None
-            try:
-                steps = getattr(getattr(self._engine, "_artifacts", None), "steps", None)
-                if isinstance(steps, list) and steps:
-                    max_action = max(int(getattr(s, "action", 0)) for s in steps)
-                    if max_action >= 3:
-                        action_type = "discrete"
-                    elif max_action == 2:
-                        action_type = "oriented"
-                    else:
-                        # Ambiguous between oriented and run_tumble; default to capture CLI default.
-                        action_type = "oriented"
-            except Exception:
-                action_type = None
-            if action_type is None:
-                action_type = "oriented"
-            kwargs.setdefault("action_type", action_type)
+            kwargs.setdefault("action_type", self._infer_action_type())
             kwargs.setdefault("observation_type", "concentration")
             kwargs.setdefault("reward_type", "step_penalty")
 
@@ -378,9 +391,9 @@ class ReplayDriver(QtCore.QObject):
                 if val is None:
                     continue
                 if dst_key in {"movie_pixel_to_grid", "movie_origin", "movie_extent"}:
-                    if isinstance(val, (tuple, list)) and len(val) == 2:
-                        with contextlib.suppress(Exception):
-                            kwargs[dst_key] = (float(val[0]), float(val[1]))
+                    pair = self._coerce_float_pair(val)
+                    if pair is not None:
+                        kwargs[dst_key] = pair
                     continue
                 kwargs[dst_key] = val
 

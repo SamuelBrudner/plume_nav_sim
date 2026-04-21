@@ -68,13 +68,16 @@ def test_replay_driver_emits_validation_diff(monkeypatch, tmp_path, qapp):  # no
 
     class DummyEngine:
         run_meta = meta
-        _artifacts = _Artifacts()
+        episode_starts = ()
 
         def validate(self, *, env_factory, render=False, distance_tolerance=None, obs_tolerance=None):  # noqa: ARG002
             raise ReplayConsistencyError("boom", diff=diff)
 
         def iter_events(self, *, start_index=0, render=False):  # noqa: ARG002
             return iter([])
+
+        def total_episodes(self) -> int:
+            return 0
 
     monkeypatch.setattr(
         "plume_nav_debugger.replay_driver.load_replay_engine",
@@ -95,4 +98,3 @@ def test_replay_driver_emits_validation_diff(monkeypatch, tmp_path, qapp):  # no
     assert isinstance(payload, dict)
     assert payload["global_step_index"] == 2
     assert payload["mismatches"][0]["field"] == "reward"
-
