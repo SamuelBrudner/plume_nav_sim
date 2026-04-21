@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 from dataclasses import dataclass
 from importlib import import_module
 from types import ModuleType
@@ -117,36 +116,40 @@ class SimulationSpec(BaseModel):
     )
 
 
-_COMPONENT_CONFIG_MAPPING_KEYS = frozenset(
+_REMOVED_COMPONENT_CONFIG_MAPPING_KEYS = frozenset(
     {"action", "observation", "reward", "goal_location", "render_mode", "wind"}
 )
-_CANONICAL_ENV_CONFIG_MAPPING_KEYS = frozenset(
+_CANONICAL_ENV_CONFIG_FIELDS = frozenset(
+    {
+        "grid_size",
+        "source_location",
+        "max_steps",
+        "goal_radius",
+        "plume_params",
+        "enable_rendering",
+    }
+)
+_CANONICAL_ENV_CONFIG_HINT_KEYS = frozenset(
     {"source_location", "plume_params", "enable_rendering"}
 )
+_IGNORED_CONFIG_MAPPING_KEYS = frozenset({"defaults", "hydra"})
 
 
 def create_simulation_spec(
     config: SimulationSpec | Mapping[str, Any] | object | None = None,
     **overrides: Any,
 ) -> SimulationSpec:
-    """Create a canonical SimulationSpec from spec-shaped or compatibility config data."""
+    """Create a canonical SimulationSpec from spec-shaped or canonical config data."""
 
     from plume_nav_sim.envs.config_types import (
         EnvironmentConfig as CanonicalEnvironmentConfig,
         create_environment_config,
     )
 
-    from .component_configs import ComponentEnvironmentConfig
-
     if isinstance(config, SimulationSpec):
         if not overrides:
             return config
         payload = config.model_dump(exclude_none=True)
-        payload.update(overrides)
-        return SimulationSpec.model_validate(payload)
-
-    if isinstance(config, ComponentEnvironmentConfig):
-        payload = config.to_simulation_spec().model_dump(exclude_none=True)
         payload.update(overrides)
         return SimulationSpec.model_validate(payload)
 
@@ -160,21 +163,34 @@ def create_simulation_spec(
 
     if not isinstance(config, Mapping):
         raise TypeError(
-            "config must be a SimulationSpec, mapping, EnvironmentConfig, "
-            "ComponentEnvironmentConfig, or None"
+            "config must be a SimulationSpec, mapping, EnvironmentConfig, or None"
         )
 
-    payload = dict(config)
-    payload.pop("defaults", None)
+    payload = {
+        key: value
+        for key, value in dict(config).items()
+        if key not in _IGNORED_CONFIG_MAPPING_KEYS
+    }
     payload.update(overrides)
 
-    if _COMPONENT_CONFIG_MAPPING_KEYS.intersection(payload):
-        compat = ComponentEnvironmentConfig.model_validate(payload)
-        return compat.to_simulation_spec()
+    removed_keys = sorted(_REMOVED_COMPONENT_CONFIG_MAPPING_KEYS.intersection(payload))
+    if removed_keys:
+        raise ValueError(
+            "component-style config mappings are no longer supported; "
+            "use SimulationSpec fields directly"
+        )
 
-    if _CANONICAL_ENV_CONFIG_MAPPING_KEYS.intersection(payload):
-        canonical = create_environment_config(payload)
-        return canonical.to_simulation_spec()
+    if _CANONICAL_ENV_CONFIG_HINT_KEYS.intersection(payload):
+        canonical_payload = {
+            key: value for key, value in payload.items() if key in _CANONICAL_ENV_CONFIG_FIELDS
+        }
+        spec_payload = {
+            key: value for key, value in payload.items() if key not in _CANONICAL_ENV_CONFIG_FIELDS
+        }
+        canonical = create_environment_config(canonical_payload)
+        merged_payload = canonical.to_simulation_spec().model_dump(exclude_none=True)
+        merged_payload.update(spec_payload)
+        return SimulationSpec.model_validate(merged_payload)
 
     return SimulationSpec.model_validate(payload)
 
@@ -214,8 +230,11 @@ def _import_longest_prefix(dotted: str) -> tuple[ModuleType, Optional[str]]:
             mod = _import_module(mod_name)
             remainder = ".".join(parts[i:]) if i < len(parts) else None
             return mod, (remainder or None)
-        except ModuleNotFoundError:
-            continue
+        except ModuleNotFoundError as exc:
+            missing = exc.name or ""
+            if missing == mod_name or mod_name.startswith(missing + "."):
+                continue
+            raise
     # Fall back to plain import error
     raise ModuleNotFoundError(f"No importable module prefix found in '{dotted}'")
 
@@ -260,8 +279,9 @@ def load_policy(spec: str, *, kwargs: Optional[dict] = None) -> LoadedPolicy:
 
 
 def reset_policy_if_possible(obj: Any, *, seed: Optional[int]) -> None:
-    with contextlib.suppress(Exception):
-        obj.reset(seed=seed)  # type: ignore[attr-defined]
+    reset = getattr(obj, "reset", None)
+    if callable(reset):
+        reset(seed=seed)
 
 
 # ===== Builders =====

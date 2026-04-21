@@ -50,7 +50,7 @@ Producers publish new versions via `dvc add` + `dvc push` or a staged pipeline. 
 Install the data extras to enable fast JSONL and validation:
 
 ```bash
-pip install -e .[data]
+pip install -e ".[data]"
 ```
 
 ### Pandas

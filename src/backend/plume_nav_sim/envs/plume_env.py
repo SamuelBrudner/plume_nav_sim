@@ -27,7 +27,6 @@ from ..interfaces import ActionProcessor, ObservationModel, RewardFunction, Vect
 from ..observations import ConcentrationSensor
 from ..plume.gaussian import GaussianPlume
 from ..plume.protocol import ConcentrationField
-from ..plume.video import VideoConfig, VideoPlume
 from ..rewards import SparseGoalReward
 from .state import EnvironmentState
 
@@ -546,92 +545,56 @@ class PlumeEnv(gym.Env):
         canvas[y0:y1, x0:x1] = np.array(color, dtype=np.uint8)
 
 
-def create_plume_env(plume_type: str = "gaussian", **kwargs: Any) -> PlumeEnv:
-    """Create a PlumeEnv with a Gaussian or video plume backend."""
+def create_plume_env(**kwargs: Any) -> PlumeEnv:
+    """Create a PlumeEnv via direct kwargs or the canonical selector surface."""
 
-    if plume_type is None:
-        plume_kind = "gaussian"
-    elif isinstance(plume_type, str):
-        plume_kind = plume_type.lower()
-    else:
+    if "plume_type" in kwargs:
         raise ValidationError(
-            "plume_type must be a string",
+            "plume_type is no longer supported. Use plume='static' or plume='movie'.",
             parameter_name="plume_type",
-            parameter_value=plume_type,
+            parameter_value=kwargs.get("plume_type"),
         )
 
-    if plume_kind == "gaussian":
+    removed_video_keys = sorted(key for key in kwargs if key.startswith("video_"))
+    if removed_video_keys:
+        alias = removed_video_keys[0]
+        raise ValidationError(
+            f"{alias} is no longer supported. Use the matching movie_* selector kwarg.",
+            parameter_name=alias,
+            parameter_value=kwargs.get(alias),
+        )
+
+    selector_keys = {
+        "goal_location",
+        "action_type",
+        "observation_type",
+        "reward_type",
+        "plume_sigma",
+        "step_size",
+        "enable_wind",
+        "wind_direction_deg",
+        "wind_speed",
+        "wind_vector",
+        "wind_noise_std",
+    }
+    uses_selector_route = any(key in kwargs for key in selector_keys) or any(
+        key.startswith("movie_") for key in kwargs
+    ) or isinstance(kwargs.get("plume"), str)
+
+    if not uses_selector_route:
         return PlumeEnv(**kwargs)
 
-    if plume_kind != "video":
-        raise ValidationError(
-            "plume_type must be 'gaussian' or 'video'",
-            parameter_name="plume_type",
-            parameter_value=plume_type,
-            expected_format="gaussian|video",
-        )
+    selector_kwargs = dict(kwargs)
+    source_location = selector_kwargs.pop("source_location", None)
+    if source_location is not None and "goal_location" not in selector_kwargs:
+        selector_kwargs["goal_location"] = source_location
 
-    if "plume" in kwargs:
-        raise ValidationError(
-            "plume must not be provided when plume_type='video'",
-            parameter_name="plume",
-            parameter_value=kwargs.get("plume"),
-        )
+    plume_params = selector_kwargs.pop("plume_params", None)
+    if plume_params is not None and "plume_sigma" not in selector_kwargs:
+        sigma = plume_params.get("sigma") if isinstance(plume_params, dict) else None
+        if sigma is not None:
+            selector_kwargs["plume_sigma"] = float(sigma)
 
-    video_step_policy_provided = "video_step_policy" in kwargs
-    video_path = kwargs.pop("video_path", None)
-    video_data = kwargs.pop("video_data", None)
-    video_fps = kwargs.pop("video_fps", None)
-    video_pixel_to_grid = kwargs.pop("video_pixel_to_grid", None)
-    video_origin = kwargs.pop("video_origin", None)
-    video_extent = kwargs.pop("video_extent", None)
-    video_step_policy = kwargs.pop("video_step_policy", "wrap")
+    from .factory import _create_plume_env_from_selectors
 
-    video_config = kwargs.pop("video_config", None)
-    if video_config is not None and not isinstance(video_config, VideoConfig):
-        raise ValidationError(
-            "video_config must be a VideoConfig instance",
-            parameter_name="video_config",
-            parameter_value=type(video_config).__name__,
-        )
-
-    if video_config is not None:
-        extra_video = any(
-            value is not None
-            for value in (
-                video_path,
-                video_data,
-                video_fps,
-                video_pixel_to_grid,
-                video_origin,
-                video_extent,
-            )
-        )
-        if extra_video or video_step_policy_provided:
-            raise ValidationError(
-                "video_config is mutually exclusive with video_* overrides",
-                parameter_name="video_config",
-                parameter_value=type(video_config).__name__,
-            )
-    else:
-        if video_path is None and video_data is None:
-            raise ValidationError(
-                "video plume requires video_path or video_data",
-                parameter_name="video_path",
-                parameter_value=video_path,
-            )
-
-        resolved_path = "" if video_path is None else str(video_path)
-        video_config = VideoConfig(
-            path=resolved_path,
-            fps=video_fps,
-            pixel_to_grid=video_pixel_to_grid,
-            origin=video_origin,
-            extent=video_extent,
-            step_policy=video_step_policy,
-            data_array=video_data,
-        )
-
-    plume = VideoPlume(video_config)
-    kwargs["plume"] = plume
-    return PlumeEnv(**kwargs)
+    return _create_plume_env_from_selectors(**selector_kwargs)

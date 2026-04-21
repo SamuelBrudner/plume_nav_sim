@@ -43,6 +43,10 @@ def test_base_config_yaml_translates_to_simulation_spec() -> None:
     assert spec.goal_radius == 5.0
     assert spec.plume_sigma == 20.0
     assert spec.render is False
+    assert "action" not in loaded
+    assert "observation" not in loaded
+    assert "reward" not in loaded
+    assert "goal_location" not in loaded
 
 
 def test_step_penalty_experiment_yaml_translates_to_simulation_spec() -> None:
@@ -56,6 +60,9 @@ def test_step_penalty_experiment_yaml_translates_to_simulation_spec() -> None:
     assert spec.reward_type == "step_penalty"
     assert spec.goal_radius == 10.0
     assert spec.plume_sigma == 25.0
+    assert "action" not in loaded
+    assert "reward" not in loaded
+    assert "goal_location" not in loaded
 
 
 def test_data_capture_configs_do_not_advertise_render_flag() -> None:

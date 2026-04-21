@@ -95,7 +95,7 @@ pip install -e ".[media]"      # video/movie plume support
 pip install -e ".[data]"       # data capture and analysis
 
 # Once published:
-# pip install plume-nav-sim[media]
+# pip install "plume-nav-sim[media]"
 ```
 
 Editable install for local development:
@@ -104,7 +104,7 @@ Editable install for local development:
 git clone https://github.com/SamuelBrudner/plume_nav_sim.git
 cd plume_nav_sim/src/backend
 python -m venv .venv && source .venv/bin/activate
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 Verify install:
@@ -112,6 +112,15 @@ Verify install:
 ```bash
 python -c "import plume_nav_sim; print(plume_nav_sim.PACKAGE_VERSION)"
 ```
+
+## Construction Surfaces
+
+Use one of these supported entry points:
+
+- `plume_nav_sim.make_env(...)` for selector-based setup with `plume="static"|"movie"` and `movie_*` kwargs
+- `plume_nav_sim.EnvironmentConfig` and `create_environment_config(...)` when you want a lightweight env-init config object
+- `plume_nav_sim.config.SimulationSpec`, `create_simulation_spec(...)`, and `prepare(...)` when the full runtime should live in one serializable spec
+- `PlumeEnv(...)` when you want to inject custom action, observation, reward, or plume objects directly
 
 ## Contributing / License
 

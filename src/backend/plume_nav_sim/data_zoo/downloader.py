@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -281,7 +282,10 @@ def _safe_extract_tar(tf: tarfile.TarFile, dest: Path, member: Optional[str]) ->
     members = [m for m in tf.getmembers() if member is None or m.name == member]
     _validate_archive_members([m.name for m in members], dest)
     for tar_member in members:
-        tf.extract(tar_member, path=dest)
+        if "filter" in inspect.signature(tf.extract).parameters:
+            tf.extract(tar_member, path=dest, filter="data")
+        else:  # pragma: no cover - Python <3.12 fallback
+            tf.extract(tar_member, path=dest)
 
 
 def _validate_archive_members(members: list[str], dest: Path) -> None:
@@ -302,4 +306,3 @@ def _maybe_rename_member(dest: Path, member: Optional[str], target_path: Path) -
                 else:
                     target_path.unlink()
             extracted.rename(target_path)
-

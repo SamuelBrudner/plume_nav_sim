@@ -5,7 +5,6 @@ Tests that the factory correctly assembles environments from components
 with various configuration options.
 """
 
-import warnings
 import numpy as np
 import pytest
 from pathlib import Path
@@ -14,26 +13,10 @@ import plume_nav_sim as pns
 from plume_nav_sim._compat import ValidationError
 from plume_nav_sim.data_zoo.download import DatasetDownloadError
 from plume_nav_sim.envs import factory as env_factory
-from plume_nav_sim.envs.factory import create_component_environment
 
 
 class TestComponentEnvironmentFactory:
     """Tests for the canonical selector-based environment construction path."""
-
-    def test_component_factory_warns_and_delegates(self):
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            env = create_component_environment()
-
-        try:
-            assert [
-                warning
-                for warning in caught
-                if issubclass(warning.category, DeprecationWarning)
-            ]
-            assert isinstance(env, pns.PlumeEnv)
-        finally:
-            env.close()
 
     def test_default_configuration(self):
         """Test: Factory creates environment with defaults."""

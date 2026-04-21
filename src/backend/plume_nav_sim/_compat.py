@@ -8,7 +8,7 @@ import numpy as np
 
 try:  # pragma: no cover - optional dependency
     import gymnasium.utils.seeding as gym_seeding
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     gym_seeding = None  # type: ignore[assignment]
 
 import gymnasium.spaces as spaces

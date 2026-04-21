@@ -37,7 +37,7 @@ class VideoConfig:
 def _open_movie_dataset(path: Path) -> Any:
     try:
         import xarray as xr
-    except Exception as exc:  # pragma: no cover - optional dependency
+    except ImportError as exc:  # pragma: no cover - optional dependency
         raise ImportError(
             "Video plume requires optional dependency 'xarray'. "
             "Install extras: pip install xarray zarr numcodecs"

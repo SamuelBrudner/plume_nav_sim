@@ -119,7 +119,7 @@ def validate_movie_dataset(ds: Any) -> MovieSchemaInfo:
     # Import lazily to avoid hard dependency at import time
     try:  # type: ignore
         import xarray as xr
-    except Exception as exc:  # pragma: no cover - import guard
+    except ImportError as exc:  # pragma: no cover - import guard
         raise ValidationError(
             "xarray is required to validate movie plume datasets; install extras 'media'",
             underlying_error=exc,  # type: ignore[arg-type]

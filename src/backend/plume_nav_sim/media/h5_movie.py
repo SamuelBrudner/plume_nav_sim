@@ -203,7 +203,7 @@ def _try_import_zarr():
         import zarr as _zarr
 
         return _zarr
-    except Exception as e:  # pragma: no cover - exercised when optional deps missing
+    except ImportError as e:  # pragma: no cover - exercised when optional deps missing
         raise ImportError(
             "zarr is required for HDF5 movie ingest. Install with 'pip install plume-nav-sim[all]' "
             "(or from source: pip install -e \".[all]\")."

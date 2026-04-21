@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import sys
 import warnings
+from pathlib import Path
 
 import plume_nav_sim as pns
-from plume_nav_sim.config import SimulationSpec, build_env
+import pytest
+
+from plume_nav_sim.config import SimulationSpec, build_env, load_policy
 
 
 def test_build_env_bypasses_public_make_env_router(monkeypatch) -> None:
@@ -32,7 +36,7 @@ def test_build_env_bypasses_public_make_env_router(monkeypatch) -> None:
         env.close()
 
 
-def test_build_env_suppresses_component_deprecation_warning() -> None:
+def test_build_env_has_no_deprecation_warnings() -> None:
     spec = SimulationSpec(
         grid_size=(16, 16),
         source_location=(8, 8),
@@ -48,12 +52,7 @@ def test_build_env_suppresses_component_deprecation_warning() -> None:
         env = build_env(spec)
 
     try:
-        dep_messages = [
-            str(warning.message)
-            for warning in caught
-            if issubclass(warning.category, DeprecationWarning)
-        ]
-        assert dep_messages == []
+        assert caught == []
     finally:
         env.close()
 
@@ -105,3 +104,24 @@ def test_simulation_spec_preserves_step_size_wind_and_render_mode() -> None:
         assert env.wind_field is not None
     finally:
         env.close()
+
+
+def test_load_policy_preserves_nested_missing_dependency(tmp_path: Path) -> None:
+    module_dir = tmp_path / "mods"
+    module_dir.mkdir()
+    module_path = module_dir / "badpolicy.py"
+    module_path.write_text(
+        "import definitely_missing_dependency\n"
+        "class Policy:\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+
+    sys.path.insert(0, str(module_dir))
+    try:
+        with pytest.raises(ModuleNotFoundError) as exc_info:
+            load_policy("badpolicy.Policy")
+    finally:
+        sys.path.remove(str(module_dir))
+
+    assert exc_info.value.name == "definitely_missing_dependency"

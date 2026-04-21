@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, model_validato
 
 try:  # pragma: no cover - exercised when PyYAML is unavailable
     import yaml
-except Exception:  # pragma: no cover - exercised when PyYAML is unavailable
+except ImportError:  # pragma: no cover - exercised when PyYAML is unavailable
     yaml = None
 
 

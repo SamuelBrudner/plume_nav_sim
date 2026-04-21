@@ -5,7 +5,7 @@ This runbook describes how to run plume-nav-sim data capture jobs using Hydra co
 ## Prerequisites
 
 - Create and activate the project environment (with data extras):
-  - `conda env create -f src/backend/environment.yml` (or `pip install -e src/backend[ops,data]`)
+  - `conda env create -f src/backend/environment.yml` (or `pip install -e "src/backend[ops,data]"`)
 - Optional: enable Parquet export by installing the `data` extra (`pyarrow`, `pandas`).
 
 ## Configs

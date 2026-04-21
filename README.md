@@ -189,7 +189,7 @@ git clone https://github.com/SamuelBrudner/plume_nav_sim.git
 cd plume_nav_sim/src/backend
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 Validate the install:
@@ -327,7 +327,7 @@ Preferences & Config:
 If you plan to run the example notebooks or want interactive Matplotlib widgets inside Jupyter, install the notebooks extra which includes ipympl:
 
 ```bash
-pip install -e .[notebooks]
+pip install -e ".[notebooks]"
 ```
 
 In your notebook, enable the widget backend before plotting:
@@ -394,7 +394,7 @@ Running the full test matrix (contracts, property-based suites, and performance 
 
 ```bash
 # Add property-based testing and perf monitors
-pip install -e .[test,benchmark]
+pip install -e ".[test,benchmark]"
 ```
 
 This installs `hypothesis` (for property/contract suites) and `psutil` (for performance benchmarks). Without them, `pytest` will report import-time failures.
@@ -411,11 +411,22 @@ These policies are referenced by dataset ingest and loader components to ensure 
 
 ## 5. Architecture Overview
 
-- `plume_nav_sim.make_env()` → default environment
-- For `gym.make()`, call `ensure_registered()` and use `ENV_ID`.
-- `PlumeEnv` → the only runtime environment implementation, with both direct component injection and selector-based construction
-- `plume_nav_sim.envs.factory.create_component_environment()` → deprecated adapter over the active `PlumeEnv` selector path
+- `plume_nav_sim.make_env(...)` → canonical selector-based environment construction for static and movie plumes
+- `plume_nav_sim.EnvironmentConfig` and `create_environment_config(...)` → canonical env-init configuration
+- `plume_nav_sim.config.SimulationSpec`, `create_simulation_spec(...)`, and `prepare(...)` → spec-first composition
+- `PlumeEnv(...)` → direct component injection when you need custom plume, sensor, action, or reward objects
+- For `gym.make()`, call `ensure_registered()` and use `ENV_ID` (`PlumeNav-v0`)
 - `docs/extending/` → deep dives on protocols, wiring, and testing
+
+### Alpha Migration Notes
+
+This backend cleanup intentionally removed compatibility APIs that duplicated the active `PlumeEnv` construction path.
+
+- `plume_nav_sim.envs.factory.create_component_environment(...)` → use `plume_nav_sim.make_env(...)` for selector kwargs or `PlumeEnv(...)` for direct injection
+- `plume_nav_sim.config.ComponentEnvironmentConfig` and `plume_nav_sim.config.EnvironmentConfig` → use `plume_nav_sim.EnvironmentConfig`
+- `component_environment_config_to_spec(...)` → use `create_simulation_spec(...)`
+- `create_component_environment_from_config(...)` and `create_environment_from_config(...)` → use `build_env(create_simulation_spec(...))` or `prepare(...)`
+- `plume_type` and `video_*` kwargs → use `plume="static"|"movie"` and `movie_*` kwargs
 
 ## 6. Reproducibility Workflow
 
@@ -508,7 +519,7 @@ setup_logging(level="INFO", console=True)
 - Install the optional data extras to enable fast JSONL, Pandera validation, and Parquet export:
 
 ```bash
-pip install -e .[data]
+pip install -e ".[data]"
 ```
 
 This pulls in:
@@ -520,7 +531,7 @@ This pulls in:
 Notes:
 
 - JSONL.gz capture works without extras; extras are needed for validation/parquet.
-- Operational logging (loguru) is a separate optional extra: `pip install -e .[ops]`.
+- Operational logging (loguru) is a separate optional extra: `pip install -e ".[ops]"`.
 
 ### Validation and Parquet examples
 

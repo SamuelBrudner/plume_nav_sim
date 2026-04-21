@@ -1,5 +1,4 @@
 import logging
-import warnings
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -27,7 +26,7 @@ from .plume_env import PlumeEnv
 
 LOG = logging.getLogger(__name__)
 
-__all__ = ["create_component_environment"]
+__all__: list[str] = []
 
 
 def _coerce_source_location_px(value: object) -> tuple[int, int] | None:
@@ -42,7 +41,7 @@ def _coerce_source_location_px(value: object) -> tuple[int, int] | None:
 def _source_location_px_from_dataset_dir(dataset_path: Path) -> tuple[int, int] | None:
     try:
         import zarr
-    except Exception:
+    except ImportError:
         return None
     try:
         root = zarr.open_group(str(dataset_path), mode="r")
@@ -95,7 +94,6 @@ def _create_plume_env_from_selectors(  # noqa: C901
     plume_sigma: float = 20.0,
     step_size: int = 1,
     render_mode: Optional[str] = None,
-    warn_deprecated: bool = False,
     # New: select plume source and optional movie configuration
     plume: Literal["static", "movie"] = "static",
     movie_path: Optional[str] = None,
@@ -266,21 +264,6 @@ def _create_plume_env_from_selectors(  # noqa: C901
         render_mode=render_mode,
         wind_field=wind_field,
     )
-
-
-def create_component_environment(
-    **kwargs: Any,
-) -> PlumeEnv:
-    warnings.warn(
-        "create_component_environment is deprecated; use plume_nav_sim.make_env(...) "
-        "with selector kwargs or plume_nav_sim.config.SimulationSpec instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    kwargs.pop("warn_deprecated", None)
-    return _create_plume_env_from_selectors(**kwargs)
-
-
 def _create_gaussian_plume_field(
     grid_size: GridSize, goal_location: Coordinates, plume_sigma: float
 ) -> GaussianPlume:
