@@ -187,6 +187,36 @@ def test_make_env_selector_route_returns_plume_env_without_deprecation_warning()
         env.close()
 
 
+def test_seeded_reset_reproduces_start_position_across_envs():
+    env_a = pns.make_env(grid_size=(8, 8), source_location=(4, 4), action_type="discrete")
+    env_b = pns.make_env(grid_size=(8, 8), source_location=(4, 4), action_type="discrete")
+
+    try:
+        _, info_a = env_a.reset(seed=19)
+        _, info_b = env_b.reset(seed=19)
+
+        assert info_a["seed"] == 19
+        assert info_b["seed"] == 19
+        assert info_a["agent_xy"] == info_b["agent_xy"]
+    finally:
+        env_a.close()
+        env_b.close()
+
+
+def test_unseeded_reset_does_not_report_synthetic_seed():
+    env = pns.make_env(grid_size=(8, 8), source_location=(4, 4), action_type="discrete")
+
+    try:
+        env.reset(seed=5)
+        _, reset_info = env.reset()
+        _, _, _, _, step_info = env.step(0)
+
+        assert "seed" not in reset_info
+        assert "seed" not in step_info
+    finally:
+        env.close()
+
+
 def test_make_env_legacy_info_surface_matches_default_info_keys():
     default_env = pns.make_env(grid_size=(8, 8), source_location=(4, 4))
     with warnings.catch_warnings():

@@ -283,15 +283,12 @@ class PlumeEnv(gym.Env):
         seed_to_use: Optional[int]
         if validated_seed is not None:
             self.np_random, seed_to_use = gym_seeding.np_random(validated_seed)
+            self._latest_seed = None if seed_to_use is None else int(seed_to_use)
         else:
             if self.np_random is None:
-                self.np_random, seed_to_use = gym_seeding.np_random(None)
-            else:
-                seed_to_use = int(
-                    self.np_random.integers(0, 2**32 - 1, dtype=np.uint32)
-                )
-
-        self._latest_seed = None if seed_to_use is None else int(seed_to_use)
+                self.np_random, _ = gym_seeding.np_random(None)
+            # Unseeded episodes remain stochastic, but do not advertise a replay seed.
+            self._latest_seed = None
         self._seed = self._latest_seed
         self._rng = self.np_random
         self._step_count = 0
@@ -314,7 +311,6 @@ class PlumeEnv(gym.Env):
         observation = self._get_observation()
         pos = self._agent_state.position
         info = {
-            "seed": self._latest_seed,
             "agent_position": (pos.x, pos.y),
             "agent_xy": (pos.x, pos.y),
             "goal_location": self.source_location,
@@ -324,6 +320,8 @@ class PlumeEnv(gym.Env):
             "total_reward": self._agent_state.total_reward,
             "goal_reached": False,
         }
+        if self._latest_seed is not None:
+            info["seed"] = self._latest_seed
         return observation, info
 
     def step(self, action: Any) -> tuple[Any, float, bool, bool, dict]:

@@ -262,10 +262,10 @@ Replay configuration (read-only):
 
 #### Replay captured runs
 
-- Point the debugger at a run directory produced by `plume-nav-capture` (expects `run.json`, `steps*.jsonl.gz` shards and/or `steps/episodes.parquet` alongside `episodes*.jsonl.gz`).
-- Loader hard-validates schema_version `1.0.0` and consistent `run_id` across `run.json`, steps, and episodes; multipart shards (`*.partNNNN.jsonl.gz`) are accepted and merged in order.
+- Point the debugger at a run directory produced by `plume-nav-capture` (expects `run.json`, `steps*.jsonl.gz`, and `episodes*.jsonl.gz`; Parquet may be exported alongside for analysis but is not used by replay).
+- Loader hard-validates schema_version `0.1` and consistent `run_id` across `run.json`, steps, and episodes; multipart shards (`*.partNNNN.jsonl.gz`) are accepted and merged in order.
 - Replay reconstructs the environment from recorded `env_config`, inferring `max_steps` from truncation markers when missing; RGB frames require `enable_rendering=True` in the capture.
-- Replay resolves `action_type` from the run metadata when present; otherwise it infers it from recorded steps and surfaces divergences as explicit errors (see Replay Config).
+- Replay resolves `action_type` from run metadata when present; otherwise it falls back to inferring it from recorded steps and surfaces divergences as explicit errors (see Replay Config).
 - Replay regression coverage lives in `tests/debugger/test_replay_navigation.py`, `tests/debugger/test_replay_validation_diff.py`, and `tests/debugger/test_movie_registry_ui.py`; these cover replay navigation, validation-diff surfacing, and replay metadata resolution in the debugger.
 - Version mismatches are treated as hard failures to avoid mixing incompatible capture formats.
 

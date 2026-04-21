@@ -77,6 +77,7 @@ Each line is a JSON object describing one environment step.
 
 Fields:
 
+- `schema_version` (string): must equal `"0.1"`
 - `ts` (float, seconds since epoch)
 - `run_id` (string)
 - `episode_id` (string)
@@ -93,7 +94,7 @@ Fields:
 Example line:
 
 ```
-{"ts":1735728000.0,"run_id":"run-20250101-120000","episode_id":"ep-000001","step":1,"action":0,"reward":0.0,"terminated":false,"truncated":false,"agent_position":{"x":16,"y":16},"distance_to_goal":22.6,"observation_summary":[0.12],"seed":123}
+{"schema_version":"0.1","ts":1735728000.0,"run_id":"run-20250101-120000","episode_id":"ep-000001","step":1,"action":0,"reward":0.0,"terminated":false,"truncated":false,"agent_position":{"x":16,"y":16},"distance_to_goal":22.6,"observation_summary":[0.12],"seed":123}
 ```
 
 ## 3) episodes.jsonl.gz
@@ -102,6 +103,7 @@ Each line summarizes a completed episode.
 
 Fields:
 
+- `schema_version` (string): must equal `"0.1"`
 - `run_id` (string)
 - `episode_id` (string)
 - `terminated` (bool)
@@ -116,7 +118,7 @@ Fields:
 Example line:
 
 ```
-{"run_id":"run-20250101-120000","episode_id":"ep-000001","terminated":true,"truncated":false,"total_steps":42,"total_reward":1.0,"final_position":{"x":48,"y":48},"final_distance_to_goal":0.0,"duration_ms":830.2,"avg_step_time_ms":19.8}
+{"schema_version":"0.1","run_id":"run-20250101-120000","episode_id":"ep-000001","terminated":true,"truncated":false,"total_steps":42,"total_reward":1.0,"final_position":{"x":48,"y":48},"final_distance_to_goal":0.0,"duration_ms":830.2,"avg_step_time_ms":19.8}
 ```
 
 ## Validation
@@ -128,6 +130,7 @@ Example line:
 
 - End‑of‑run export to single Parquet files is available via `RunRecorder.finalize(export_parquet=True)` or CLI `--parquet`.
 - Parquet export is best-effort and requires `pyarrow`; when it is unavailable the JSON artifacts are still written.
+- Replay/debugger tooling reads the JSONL.gz artifacts; parquet remains a derived analysis export in this version.
 - For very large runs, a partitioned Parquet layout (per‑episode files) can be added in future iterations.
 
 ## Performance & Storage

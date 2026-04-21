@@ -4,7 +4,7 @@
   "created_at": "2025-11-27T01:45:05.947323+00:00",
   "git_sha": "f7a7e0d125729cd97c5f1bdf3e8a03998c612b76",
   "package_version": "0.1.0",
-  "schema_version": "1.0.0",
+  "schema_version": "0.1",
   "config_hash": "8cceea3ccd425f0056cffe5e9d7ba5ee5bcb1e8380313e9c8964a4ca8c813b98",
   "env_config": {
     "grid_size": [
@@ -39,15 +39,15 @@
   "files": [
     {
       "path": "run.json",
-      "bytes": 756
+      "bytes": 755
     },
     {
       "path": "steps.jsonl.gz",
-      "bytes": 342
+      "bytes": 346
     },
     {
       "path": "episodes.jsonl.gz",
-      "bytes": 284
+      "bytes": 290
     },
     {
       "path": "steps.parquet",

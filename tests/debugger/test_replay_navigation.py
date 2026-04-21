@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,8 @@ from PySide6 import QtWidgets  # noqa: E402
 
 from plume_nav_debugger.replay_driver import ReplayDriver  # noqa: E402
 from plume_nav_debugger.widgets.control_bar import ControlBar  # noqa: E402
+from plume_nav_sim.cli import capture  # noqa: E402
+from plume_nav_sim.data_capture.loader import load_replay_artifacts  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -32,6 +35,13 @@ class _Ev:
         self.terminated = bool(terminated)
         self.truncated = bool(truncated)
         self.info = info or {}
+
+
+def _latest_run_dir(output_root: Path, experiment: str) -> Path:
+    exp_dir = output_root / experiment
+    run_dirs = sorted(path for path in exp_dir.iterdir() if path.is_dir())
+    assert run_dirs, f"no run directories under {exp_dir}"
+    return run_dirs[-1]
 
 
 def test_replay_driver_markers_and_semantic_jumps(
@@ -90,3 +100,42 @@ def test_control_bar_replay_jump_signals_and_markers(
 
     c.set_replay_markers({"episode": [0, 2], "truncated": [2]})
     assert c.timeline_slider.get_markers()["episode"] == [0, 2]
+
+
+def test_replay_driver_loads_real_capture_run(
+    tmp_path: Path,
+    qapp: QtWidgets.QApplication,  # noqa: ARG001
+) -> None:
+    output_root = tmp_path / "results"
+    rc = capture.main(
+        [
+            "--output",
+            str(output_root),
+            "--experiment",
+            "replay-e2e",
+            "--episodes",
+            "1",
+            "--grid",
+            "8x8",
+            "--max-steps",
+            "4",
+            "--seed",
+            "123",
+        ]
+    )
+    assert rc == 0
+
+    run_dir = _latest_run_dir(output_root, "replay-e2e")
+    artifacts = load_replay_artifacts(run_dir)
+
+    driver = ReplayDriver()
+    errors: list[str] = []
+    driver.error_occurred.connect(lambda msg: errors.append(str(msg)))
+
+    driver.load_run(run_dir)
+
+    assert not errors
+    assert driver.is_loaded()
+    assert driver.total_steps() == len(artifacts.steps)
+    assert driver.total_episodes() == len(artifacts.episodes)
+    assert driver.current_index() == 0
