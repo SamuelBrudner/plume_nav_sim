@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from plume_nav_sim.config.component_configs import ComponentEnvironmentConfig
+from plume_nav_sim.config import create_simulation_spec
 
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
@@ -31,23 +31,38 @@ def _load_yaml(path: Path) -> dict:
     return loaded
 
 
-def test_base_config_yaml_matches_environment_config_model() -> None:
+def test_base_config_yaml_translates_to_simulation_spec() -> None:
     loaded = _load_yaml(BASE_CONFIG)
-    loaded.pop("defaults", None)
+    spec = create_simulation_spec(loaded)
 
-    validated = ComponentEnvironmentConfig.model_validate(loaded)
+    assert spec.grid_size == (128, 128)
+    assert spec.source_location == (64, 64)
+    assert spec.action_type == "discrete"
+    assert spec.step_size == 1
+    assert spec.reward_type == "sparse"
+    assert spec.goal_radius == 5.0
+    assert spec.plume_sigma == 20.0
+    assert spec.render is False
+    assert "action" not in loaded
+    assert "observation" not in loaded
+    assert "reward" not in loaded
+    assert "goal_location" not in loaded
 
-    assert validated.reward.goal_reward == 1.0
-    assert validated.reward.step_penalty == 0.01
 
-
-def test_step_penalty_experiment_yaml_matches_environment_config_model() -> None:
+def test_step_penalty_experiment_yaml_translates_to_simulation_spec() -> None:
     loaded = _load_yaml(STEP_PENALTY_EXPERIMENT)
+    spec = create_simulation_spec(loaded)
 
-    validated = ComponentEnvironmentConfig.model_validate(loaded)
-
-    assert validated.reward.goal_reward == 10.0
-    assert validated.reward.step_penalty == 0.01
+    assert spec.grid_size == (128, 128)
+    assert spec.source_location == (100, 100)
+    assert spec.action_type == "oriented"
+    assert spec.step_size == 2
+    assert spec.reward_type == "step_penalty"
+    assert spec.goal_radius == 10.0
+    assert spec.plume_sigma == 25.0
+    assert "action" not in loaded
+    assert "reward" not in loaded
+    assert "goal_location" not in loaded
 
 
 def test_data_capture_configs_do_not_advertise_render_flag() -> None:

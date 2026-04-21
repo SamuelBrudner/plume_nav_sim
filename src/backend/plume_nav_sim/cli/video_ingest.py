@@ -18,7 +18,7 @@ def _try_import_imageio_v3():
         import imageio.v3 as iio
 
         return iio
-    except Exception as e:  # pragma: no cover - exercised in media-optional envs
+    except ImportError as e:  # pragma: no cover - exercised in media-optional envs
         raise ImportError(
             "imageio is required for video ingest. Install with 'pip install imageio'."
         ) from e
@@ -29,7 +29,7 @@ def _try_import_zarr():
         import zarr
 
         return zarr
-    except Exception as e:  # pragma: no cover - exercised in media-optional envs
+    except ImportError as e:  # pragma: no cover - exercised in media-optional envs
         raise ImportError(
             "zarr is required for video ingest. Install with 'pip install zarr numcodecs'."
         ) from e

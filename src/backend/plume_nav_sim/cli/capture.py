@@ -10,7 +10,6 @@ from typing import Any, List, Optional, Tuple
 import plume_nav_sim as pns
 from plume_nav_sim.data_capture import RunRecorder
 from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper
-from plume_nav_sim.envs import create_component_environment
 from plume_nav_sim.envs.config_types import EnvironmentConfig
 
 HYDRA_OPTIONAL_DEPENDENCY_MSG = (
@@ -359,7 +358,7 @@ def _tuple_or_none(value: object) -> tuple[Any, ...] | None:
     return None
 
 
-def _base_component_env_kwargs(
+def _base_selector_env_kwargs(
     env_cfg: Mapping[str, Any],
     *,
     action_type_override: Optional[str] = None,
@@ -390,27 +389,27 @@ def _env_from_cfg(
 ) -> Tuple[object, int, int]:
     env_cfg = cfg.get("env", {})
     plume_mode = env_cfg.get("plume", "static")
-    component_kwargs = _base_component_env_kwargs(
+    selector_kwargs = _base_selector_env_kwargs(
         env_cfg, action_type_override=action_type_override
     )
     if plume_mode == "movie":
-        return _env_from_movie_cfg(cfg, component_kwargs)
+        return _env_from_movie_cfg(cfg, selector_kwargs)
     # static plume: require grid_size
     grid = env_cfg.get("grid_size", [64, 64])
     if not isinstance(grid, (list, tuple)) or len(grid) != 2:
         raise SystemExit("env.grid_size must be a 2-element list or tuple")
     w, h = int(grid[0]), int(grid[1])
-    component_kwargs["grid_size"] = (w, h)
-    env = create_component_environment(**component_kwargs)
+    selector_kwargs["grid_size"] = (w, h)
+    env = pns.make_env(**selector_kwargs)
     return env, w, h
 
 
 def _env_from_movie_cfg(
-    cfg: Mapping[str, Any], component_kwargs: dict[str, Any]
+    cfg: Mapping[str, Any], selector_kwargs: dict[str, Any]
 ) -> Tuple[object, int, int]:
     movie_cfg = cfg.get("movie", {})
     movie_dataset_id = movie_cfg.get("dataset_id")
-    movie_kwargs = dict(component_kwargs)
+    movie_kwargs = dict(selector_kwargs)
     movie_kwargs.update(
         {
             "plume": "movie",
@@ -441,7 +440,7 @@ def _env_from_movie_cfg(
     _set_if_not_none(movie_kwargs, "movie_normalize", movie_cfg.get("normalize"))
     _set_if_not_none(movie_kwargs, "movie_chunks", movie_cfg.get("chunks"))
 
-    env = create_component_environment(**movie_kwargs)
+    env = pns.make_env(**movie_kwargs)
     w, h = _grid_dimensions_from_env(env)
     return env, w, h
 
@@ -630,15 +629,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         _merge_args_from_cfg(args, cfg, effective_argv)
     else:
         w, h = _parse_grid_arg(args.grid)
-        component_kwargs = {
+        selector_kwargs = {
             "grid_size": (w, h),
             "action_type": args.action_type or "oriented",
             "observation_type": "concentration",
             "reward_type": "step_penalty",
         }
-        _set_if_not_none(component_kwargs, "max_steps", args.max_steps)
-        env = create_component_environment(
-            **component_kwargs,
+        _set_if_not_none(selector_kwargs, "max_steps", args.max_steps)
+        env = pns.make_env(
+            **selector_kwargs,
         )
 
     try:

@@ -5,44 +5,26 @@ Tests that the factory correctly assembles environments from components
 with various configuration options.
 """
 
-import warnings
 import numpy as np
 import pytest
 from pathlib import Path
 
+import plume_nav_sim as pns
 from plume_nav_sim._compat import ValidationError
 from plume_nav_sim.data_zoo.download import DatasetDownloadError
 from plume_nav_sim.envs import factory as env_factory
-from plume_nav_sim.envs.factory import create_component_environment
 
 
 class TestComponentEnvironmentFactory:
-    """Tests for create_component_environment factory."""
-
-    def test_factory_suppresses_component_deprecation_warning_by_default(self):
-        """Factory is the supported surface, so it should be quiet by default."""
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            env = create_component_environment()
-
-        try:
-            assert not [
-                warning
-                for warning in caught
-                if issubclass(warning.category, DeprecationWarning)
-            ]
-        finally:
-            env.close()
+    """Tests for the canonical selector-based environment construction path."""
 
     def test_default_configuration(self):
         """Test: Factory creates environment with defaults."""
-        env = create_component_environment()
+        env = pns.make_env(action_type="discrete")
 
         assert env is not None
-        assert env.grid_size.width == 128
-        assert env.grid_size.height == 128
-        assert env.goal_location.x == 64
-        assert env.goal_location.y == 64
+        assert env.grid_size == (128, 128)
+        assert env.source_location == (64, 64)
         assert env.max_steps == 1000
 
         # Should be able to reset and step
@@ -57,7 +39,7 @@ class TestComponentEnvironmentFactory:
 
     def test_discrete_actions(self):
         """Test: Factory creates discrete action environment."""
-        env = create_component_environment(action_type="discrete")
+        env = pns.make_env(action_type="discrete")
 
         # Discrete actions have 4 actions (UP, RIGHT, DOWN, LEFT)
         assert env.action_space.n == 4
@@ -65,7 +47,7 @@ class TestComponentEnvironmentFactory:
 
     def test_oriented_actions(self):
         """Test: Factory creates oriented action environment."""
-        env = create_component_environment(action_type="oriented")
+        env = pns.make_env(action_type="oriented")
 
         # Oriented actions have 3 actions (FORWARD, TURN_LEFT, TURN_RIGHT)
         assert env.action_space.n == 3
@@ -73,7 +55,7 @@ class TestComponentEnvironmentFactory:
 
     def test_run_tumble_actions(self):
         """Test: Factory creates run/tumble action environment."""
-        env = create_component_environment(action_type="run_tumble")
+        env = pns.make_env(action_type="run_tumble")
 
         # Run/tumble actions have 2 actions (RUN, TUMBLE)
         assert env.action_space.n == 2
@@ -83,7 +65,7 @@ class TestComponentEnvironmentFactory:
 
     def test_concentration_observation(self):
         """Test: Factory creates concentration sensor."""
-        env = create_component_environment(observation_type="concentration")
+        env = pns.make_env(observation_type="concentration")
 
         obs, _ = env.reset()
         # ConcentrationSensor returns (1,) array
@@ -92,7 +74,7 @@ class TestComponentEnvironmentFactory:
 
     def test_antennae_observation(self):
         """Test: Factory creates antennae array sensor."""
-        env = create_component_environment(observation_type="antennae")
+        env = pns.make_env(observation_type="antennae")
 
         obs, _ = env.reset()
         # AntennaeArraySensor with 2 sensors returns (2,) array
@@ -101,7 +83,7 @@ class TestComponentEnvironmentFactory:
 
     def test_sparse_reward(self):
         """Test: Factory creates sparse reward function."""
-        env = create_component_environment(reward_type="sparse")
+        env = pns.make_env(reward_type="sparse")
 
         obs, _ = env.reset()
         action = 0
@@ -113,7 +95,7 @@ class TestComponentEnvironmentFactory:
 
     def test_step_penalty_reward(self):
         """Test: Factory creates step penalty reward function."""
-        env = create_component_environment(reward_type="step_penalty")
+        env = pns.make_env(reward_type="step_penalty")
 
         obs, _ = env.reset()
         action = 0
@@ -125,15 +107,14 @@ class TestComponentEnvironmentFactory:
 
     def test_custom_grid_size(self):
         """Test: Factory accepts custom grid size."""
-        env = create_component_environment(grid_size=(64, 64))
+        env = pns.make_env(grid_size=(64, 64), action_type="discrete")
 
-        assert env.grid_size.width == 64
-        assert env.grid_size.height == 64
+        assert env.grid_size == (64, 64)
         env.close()
 
     def test_custom_goal_location(self):
         """Test: Factory accepts custom goal location."""
-        env = create_component_environment(goal_location=(50, 50))
+        env = pns.make_env(goal_location=(50, 50), action_type="discrete")
 
         assert env.goal_location.x == 50
         assert env.goal_location.y == 50
@@ -141,7 +122,7 @@ class TestComponentEnvironmentFactory:
 
     def test_custom_start_location(self):
         """Test: Factory accepts custom start location."""
-        env = create_component_environment(start_location=(10, 10))
+        env = pns.make_env(start_location=(10, 10), action_type="discrete")
 
         assert env.start_location.x == 10
         assert env.start_location.y == 10
@@ -153,14 +134,14 @@ class TestComponentEnvironmentFactory:
 
     def test_custom_max_steps(self):
         """Test: Factory accepts custom max_steps."""
-        env = create_component_environment(max_steps=500)
+        env = pns.make_env(max_steps=500, action_type="discrete")
 
         assert env.max_steps == 500
         env.close()
 
     def test_custom_goal_radius(self):
         """Test: Factory accepts custom goal_radius."""
-        env = create_component_environment(goal_radius=10.0)
+        env = pns.make_env(goal_radius=10.0, action_type="discrete")
 
         assert env.goal_radius == 10.0
         env.close()
@@ -174,29 +155,33 @@ class TestComponentEnvironmentFactory:
                 "or 'run_tumble'."
             ),
         ):
-            create_component_environment(action_type="invalid")
+            pns.make_env(action_type="invalid")
 
     def test_invalid_observation_type_raises_error(self):
         """Test: Factory raises error for invalid observation_type."""
         with pytest.raises(ValueError, match="Invalid observation_type"):
-            create_component_environment(observation_type="invalid")
+            pns.make_env(observation_type="invalid")
 
     def test_invalid_reward_type_raises_error(self):
         """Test: Factory raises error for invalid reward_type."""
         with pytest.raises(ValueError, match="Invalid reward_type"):
-            create_component_environment(reward_type="dense")  # 'dense' not supported
+            pns.make_env(reward_type="dense")  # 'dense' not supported
 
     def test_explicit_out_of_bounds_goal_location_raises_validation_error(self):
         with pytest.raises(ValidationError, match="coordinates outside grid bounds"):
-            create_component_environment(grid_size=(8, 8), goal_location=(99, 99))
+            pns.make_env(grid_size=(8, 8), goal_location=(99, 99), action_type="discrete")
 
     def test_explicit_out_of_bounds_start_location_raises_validation_error(self):
         with pytest.raises(ValidationError, match="coordinates outside grid bounds"):
-            create_component_environment(grid_size=(8, 8), start_location=(99, 99))
+            pns.make_env(
+                grid_size=(8, 8),
+                start_location=(99, 99),
+                action_type="discrete",
+            )
 
     def test_full_episode_execution(self):
         """Test: Factory environment can execute full episode."""
-        env = create_component_environment(
+        env = pns.make_env(
             grid_size=(32, 32),
             goal_location=(16, 16),
             max_steps=50,
@@ -220,8 +205,8 @@ class TestComponentEnvironmentFactory:
 
     def test_multiple_environments(self):
         """Test: Can create multiple environments simultaneously."""
-        env1 = create_component_environment(grid_size=(32, 32))
-        env2 = create_component_environment(grid_size=(64, 64))
+        env1 = pns.make_env(grid_size=(32, 32), action_type="discrete")
+        env2 = pns.make_env(grid_size=(64, 64), action_type="discrete")
 
         obs1, _ = env1.reset()
         obs2, _ = env2.reset()
@@ -266,7 +251,7 @@ def test_movie_dataset_id_uses_cached_registry_dataset(
     )
     monkeypatch.setattr(env_factory, "VideoPlume", DummyVideoPlume)
 
-    env = create_component_environment(
+    env = pns.make_env(
         plume="movie",
         movie_dataset_id="colorado_jet_v1",
     )
@@ -294,7 +279,7 @@ def test_movie_dataset_id_missing_cache_has_clear_error(
     )
 
     with pytest.raises(ValueError, match="set auto_download=True"):
-        create_component_environment(
+        pns.make_env(
             plume="movie",
             movie_dataset_id="colorado_jet_v1",
         )
@@ -314,14 +299,14 @@ def test_movie_dataset_id_unknown_has_known_id_hint(
     )
 
     with pytest.raises(ValueError, match="known_dataset"):
-        create_component_environment(
+        pns.make_env(
             plume="movie",
             movie_dataset_id="missing_dataset",
         )
 
 
 def test_component_environment_rgb_render_smoke() -> None:
-    env = create_component_environment(render_mode="rgb_array")
+    env = pns.make_env(render_mode="rgb_array")
 
     try:
         env.reset(seed=3)

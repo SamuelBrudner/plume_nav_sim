@@ -2,7 +2,7 @@
 
 This is the fastest path to plug in your own navigation logic.
 
-`ComponentBasedEnvironment` composes 3 swappable components:
+`PlumeEnv` composes 3 swappable components:
 - `ActionProcessor`: maps policy action -> next `AgentState`
 - `ObservationModel`: maps `EnvState` -> observation
 - `RewardFunction`: maps transition -> scalar reward
@@ -134,13 +134,13 @@ class MyRewardFunction:
         return {"type": "my_reward_function", "goal_radius": self.goal_radius}
 ```
 
-## 3) Register and Use with `ComponentBasedEnvironment`
+## 3) Register and Use with `PlumeEnv`
 
 "Register" here means instantiate your components and inject them into the env.
 
 ```python
 from plume_nav_sim.core.types import Coordinates, GridSize
-from plume_nav_sim.envs.component_env import ComponentBasedEnvironment
+from plume_nav_sim.envs import PlumeEnv
 from plume_nav_sim.interfaces import ActionProcessor, ObservationModel, RewardFunction
 from plume_nav_sim.plume.gaussian import GaussianPlume
 
@@ -158,15 +158,15 @@ assert isinstance(reward_function, RewardFunction)
 
 field = GaussianPlume(grid_size=grid, source_location=goal, sigma=12.0)
 
-env = ComponentBasedEnvironment(
-    action_processor=action_processor,
-    observation_model=observation_model,
-    reward_function=reward_function,
-    concentration_field=field,
+env = PlumeEnv(
     grid_size=grid,
-    goal_location=goal,
+    source_location=goal,
     goal_radius=2.0,
     max_steps=500,
+    plume=field,
+    action_model=action_processor,
+    sensor_model=observation_model,
+    reward_fn=reward_function,
 )
 
 obs, info = env.reset(seed=0)

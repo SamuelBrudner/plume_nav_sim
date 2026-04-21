@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from plume_nav_sim.envs import create_component_environment
+from plume_nav_sim import make_env
 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
 
 # Expose demo package policy
@@ -19,7 +19,7 @@ from plume_nav_sim.runner.runner import Runner
 
 
 def _env(action_type: str):
-    return create_component_environment(
+    return make_env(
         grid_size=(8, 8),
         goal_location=(4, 4),
         max_steps=10,

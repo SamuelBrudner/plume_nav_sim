@@ -1,0 +1,14 @@
+# @package _global_
+
+# Oriented actions with a step-penalty reward.
+# Good for: directional policies that should minimize episode length.
+
+grid_size: [128, 128]
+source_location: [100, 100]
+max_steps: 1000
+goal_radius: 8.0
+plume_sigma: 20.0
+action_type: oriented
+step_size: 1
+observation_type: concentration
+reward_type: step_penalty

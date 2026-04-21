@@ -21,14 +21,14 @@ import gymnasium as gym
 import numpy as np
 import pytest
 
-from plume_nav_sim.envs import create_component_environment
+from plume_nav_sim import make_env
 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
 
 # Utilities -----------------------------------------------------------------
 
 
 def create_test_env(*, rgb: bool = False):
-    return create_component_environment(
+    return make_env(
         grid_size=(16, 16),
         goal_location=(8, 8),
         action_type="oriented",
@@ -67,6 +67,17 @@ class _ZeroPolicy:
         return None
 
     def select_action(self, observation, *, explore: bool = True):  # noqa: ARG002
+        return 0
+
+
+class _NoExploreKwargPolicy:
+    def __init__(self) -> None:
+        self.action_space = gym.spaces.Discrete(2)
+
+    def reset(self, *, seed=None):  # noqa: ARG002
+        return None
+
+    def select_action(self, observation):  # noqa: ARG002
         return 0
 
 
@@ -325,3 +336,51 @@ def test_heartbeat_interval_must_be_positive():
 
     with pytest.raises(ValueError, match="positive integer"):
         _ = r.run_episode(env, policy, heartbeat_interval=0)
+
+
+def test_run_episode_propagates_policy_reset_failures():
+    from plume_nav_sim.runner import runner as r
+
+    class ResetRaisesPolicy(_ZeroPolicy):
+        def reset(self, *, seed=None):  # noqa: ARG002
+            raise RuntimeError("reset blew up")
+
+    env = create_test_env(rgb=False)
+    try:
+        with pytest.raises(RuntimeError, match="reset blew up"):
+            r.run_episode(env, ResetRaisesPolicy(), max_steps=1, seed=0)
+    finally:
+        env.close()
+
+
+def test_run_episode_does_not_mask_internal_typeerror_in_policy():
+    from plume_nav_sim.runner import runner as r
+
+    class TypeErrorPolicy(_ZeroPolicy):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        def select_action(self, observation, *, explore: bool = True):  # noqa: ARG002
+            self.calls += 1
+            raise TypeError("internal bug")
+
+    env = create_test_env(rgb=False)
+    policy = TypeErrorPolicy()
+    try:
+        with pytest.raises(TypeError, match="internal bug"):
+            r.run_episode(env, policy, max_steps=1, seed=0)
+    finally:
+        env.close()
+
+    assert policy.calls == 1
+
+
+def test_run_episode_supports_policy_without_explore_kwarg():
+    from plume_nav_sim.runner import runner as r
+
+    env = _FixedLengthEnv(steps_to_terminate=1)
+    result = r.run_episode(env, _NoExploreKwargPolicy(), seed=0)
+
+    assert result.steps == 1
+    assert result.terminated is True

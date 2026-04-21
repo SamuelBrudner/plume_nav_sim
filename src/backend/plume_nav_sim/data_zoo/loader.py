@@ -31,7 +31,7 @@ def _normalize_arg(normalize: NormalizationMethod | str | None) -> Normalization
 def _open_zarr_dataset(path: Path, *, chunks: Any) -> "xr.Dataset":
     try:
         import xarray as xr
-    except Exception as exc:  # pragma: no cover - optional dependency
+    except ImportError as exc:  # pragma: no cover - optional dependency
         raise ImportError(
             "load_plume requires optional dependency 'xarray'. "
             "Install media extras: pip install plume-nav-sim[media] "
@@ -124,7 +124,7 @@ def _apply_normalization(
 
     try:
         import xarray as xr
-    except Exception as exc:  # pragma: no cover - optional dependency
+    except ImportError as exc:  # pragma: no cover - optional dependency
         raise ImportError(
             "load_plume normalization requires optional dependency 'xarray'. "
             "Install media extras: pip install plume-nav-sim[media] "

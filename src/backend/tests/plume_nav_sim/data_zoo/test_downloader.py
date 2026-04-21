@@ -7,6 +7,7 @@ Every HTTP interaction is mocked, and filesystem operations use tmp_path.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import io
 import json
 import tarfile
@@ -304,6 +305,34 @@ class TestSafeExtractTar:
             _safe_extract_tar(tf, dest, member="wanted.txt")
         assert (dest / "wanted.txt").read_bytes() == b"wanted"
         assert not (dest / "skip.txt").exists()
+
+    def test_uses_explicit_data_filter_when_supported(self, tmp_path: Path):
+        archive_data = _make_tar_gz_bytes({"root/a.txt": b"aaa"})
+        archive_path = _write_file(tmp_path / "archive.tar.gz", archive_data)
+        dest = tmp_path / "out"
+        dest.mkdir()
+
+        with tarfile.open(archive_path, "r:gz") as tf:
+            if "filter" not in inspect.signature(tf.extract).parameters:
+                pytest.skip("tarfile.extract filter kwarg unavailable on this Python")
+
+            seen_filters: list[object] = []
+            original_extract = tf.extract
+
+            def wrapped_extract(member, path=".", *, set_attrs=True, numeric_owner=False, filter=None):
+                seen_filters.append(filter)
+                return original_extract(
+                    member,
+                    path=path,
+                    set_attrs=set_attrs,
+                    numeric_owner=numeric_owner,
+                    filter=filter,
+                )
+
+            tf.extract = wrapped_extract  # type: ignore[assignment]
+            _safe_extract_tar(tf, dest, member=None)
+
+        assert seen_filters == ["data"]
 
 
 # ---------------------------------------------------------------------------

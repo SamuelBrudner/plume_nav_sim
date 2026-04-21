@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-import warnings
-
 import plume_nav_sim as pns
 from plume_nav_sim._compat import ValidationError
 from plume_nav_sim.envs.plume_env import create_plume_env
 from plume_nav_sim.media.schema import DIMS_TYX, SCHEMA_VERSION
+from plume_nav_sim.observations import ConcentrationSensor
 
 
 class _FakeSlice:
@@ -65,7 +64,6 @@ def _make_video_data_array(
 
 def test_create_plume_env_gaussian_backend_runs():
     env = create_plume_env(
-        plume_type="gaussian",
         grid_size=(10, 10),
         source_location=(5, 5),
         max_steps=5,
@@ -89,8 +87,8 @@ def test_create_plume_env_gaussian_backend_runs():
 def test_create_plume_env_video_backend_advances_frames():
     data_array = _make_video_data_array()
     env = create_plume_env(
-        plume_type="video",
-        video_data=data_array,
+        plume="movie",
+        movie_data=data_array,
         max_steps=3,
     )
     try:
@@ -108,7 +106,6 @@ def test_create_plume_env_video_backend_advances_frames():
 def test_create_plume_env_rejects_explicit_out_of_bounds_source_location():
     with pytest.raises(ValidationError, match="within grid bounds"):
         create_plume_env(
-            plume_type="gaussian",
             grid_size=(8, 8),
             source_location=(99, 99),
             max_steps=5,
@@ -136,15 +133,11 @@ def test_make_env_normalizes_static_plume_to_stable_plume_env():
 
 
 def test_make_env_normalizes_movie_plume_to_stable_video_env():
-    with pytest.warns(
-        DeprecationWarning,
-        match="make_env\\(plume='movie'\\) is deprecated; use plume_type='video' instead",
-    ):
-        env = pns.make_env(
-            plume="movie",
-            video_data=_make_video_data_array(),
-            max_steps=3,
-        )
+    env = pns.make_env(
+        plume="movie",
+        movie_data=_make_video_data_array(),
+        max_steps=3,
+    )
 
     try:
         assert isinstance(env, pns.PlumeEnv)
@@ -156,46 +149,69 @@ def test_make_env_normalizes_movie_plume_to_stable_video_env():
         env.close()
 
 
-def test_make_env_rejects_mixed_stable_and_component_kwargs():
+def test_make_env_rejects_direct_component_kwargs():
     with pytest.raises(
         ValidationError,
-        match="Cannot mix deprecated component kwargs with stable PlumeEnv kwargs",
+        match="selector kwargs only",
     ):
         pns.make_env(
-            plume="movie",
-            video_data=_make_video_data_array(),
             action_type="discrete",
+            sensor_model=ConcentrationSensor(),
         )
 
 
-def test_make_env_component_route_warns_and_returns_compatibility_env():
-    with pytest.warns(
-        DeprecationWarning,
-        match="routing to component environment factory",
-    ):
-        env = pns.make_env(
-            grid_size=(8, 8),
-            source_location=(4, 4),
-            action_type="discrete",
-        )
+def test_make_env_selector_route_returns_plume_env():
+    env = pns.make_env(
+        grid_size=(8, 8),
+        source_location=(4, 4),
+        action_type="discrete",
+    )
 
     try:
-        assert not isinstance(env, pns.PlumeEnv)
+        assert isinstance(env, pns.PlumeEnv)
         _, info = env.reset(seed=7)
         assert info["seed"] == 7
     finally:
         env.close()
 
 
+def test_seeded_reset_reproduces_start_position_across_envs():
+    env_a = pns.make_env(grid_size=(8, 8), source_location=(4, 4), action_type="discrete")
+    env_b = pns.make_env(grid_size=(8, 8), source_location=(4, 4), action_type="discrete")
+
+    try:
+        _, info_a = env_a.reset(seed=19)
+        _, info_b = env_b.reset(seed=19)
+
+        assert info_a["seed"] == 19
+        assert info_b["seed"] == 19
+        assert info_a["agent_xy"] == info_b["agent_xy"]
+    finally:
+        env_a.close()
+        env_b.close()
+
+
+def test_unseeded_reset_does_not_report_synthetic_seed():
+    env = pns.make_env(grid_size=(8, 8), source_location=(4, 4), action_type="discrete")
+
+    try:
+        env.reset(seed=5)
+        _, reset_info = env.reset()
+        _, _, _, _, step_info = env.step(0)
+
+        assert "seed" not in reset_info
+        assert "seed" not in step_info
+    finally:
+        env.close()
+
+
 def test_make_env_legacy_info_surface_matches_default_info_keys():
     default_env = pns.make_env(grid_size=(8, 8), source_location=(4, 4))
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        legacy_env = pns.make_env(
-            grid_size=(8, 8),
-            source_location=(4, 4),
-            action_type="discrete",
-        )
+    legacy_env = pns.make_env(
+        grid_size=(8, 8),
+        source_location=(4, 4),
+        action_type="discrete",
+    )
 
     try:
         _, default_reset_info = default_env.reset(seed=123)
@@ -208,3 +224,18 @@ def test_make_env_legacy_info_surface_matches_default_info_keys():
     finally:
         default_env.close()
         legacy_env.close()
+
+
+def test_make_env_rejects_removed_plume_type_alias():
+    with pytest.raises(ValidationError, match="plume_type is no longer supported"):
+        pns.make_env(plume_type="video")
+
+
+def test_make_env_rejects_removed_video_alias_kwargs():
+    with pytest.raises(ValidationError, match="video_data is no longer supported"):
+        pns.make_env(plume="movie", video_data=_make_video_data_array())
+
+
+def test_create_plume_env_rejects_removed_video_alias_kwargs():
+    with pytest.raises(ValidationError, match="video_data is no longer supported"):
+        create_plume_env(plume="movie", video_data=_make_video_data_array())

@@ -78,12 +78,12 @@ print(info["agent_xy"])  # starting position
   env = gym.make(ENV_ID)
   ```
 
-- **Component knobs**: use the explicit component factory for `action_type`, `observation_type`, `reward_type`, wind, or movie-plume options:
+- **Selector knobs**: use `make_env(...)` directly for `action_type`, `observation_type`, `reward_type`, wind, or movie-plume options:
 
   ```python
-  from plume_nav_sim.envs import create_component_environment
+  import plume_nav_sim as pns
 
-  env = create_component_environment(
+  env = pns.make_env(
       action_type="run_tumble",
       observation_type="antennae",
       reward_type="step_penalty",
@@ -189,7 +189,7 @@ git clone https://github.com/SamuelBrudner/plume_nav_sim.git
 cd plume_nav_sim/src/backend
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 Validate the install:
@@ -262,10 +262,10 @@ Replay configuration (read-only):
 
 #### Replay captured runs
 
-- Point the debugger at a run directory produced by `plume-nav-capture` (expects `run.json`, `steps*.jsonl.gz` shards and/or `steps/episodes.parquet` alongside `episodes*.jsonl.gz`).
-- Loader hard-validates schema_version `1.0.0` and consistent `run_id` across `run.json`, steps, and episodes; multipart shards (`*.partNNNN.jsonl.gz`) are accepted and merged in order.
+- Point the debugger at a run directory produced by `plume-nav-capture` (expects `run.json`, `steps*.jsonl.gz`, and `episodes*.jsonl.gz`; Parquet may be exported alongside for analysis but is not used by replay).
+- Loader hard-validates schema_version `0.1` and consistent `run_id` across `run.json`, steps, and episodes; multipart shards (`*.partNNNN.jsonl.gz`) are accepted and merged in order.
 - Replay reconstructs the environment from recorded `env_config`, inferring `max_steps` from truncation markers when missing; RGB frames require `enable_rendering=True` in the capture.
-- Replay resolves `action_type` from the run metadata when present; otherwise it infers it from recorded steps and surfaces divergences as explicit errors (see Replay Config).
+- Replay resolves `action_type` from run metadata when present; otherwise it falls back to inferring it from recorded steps and surfaces divergences as explicit errors (see Replay Config).
 - Replay regression coverage lives in `tests/debugger/test_replay_navigation.py`, `tests/debugger/test_replay_validation_diff.py`, and `tests/debugger/test_movie_registry_ui.py`; these cover replay navigation, validation-diff surfacing, and replay metadata resolution in the debugger.
 - Version mismatches are treated as hard failures to avoid mixing incompatible capture formats.
 
@@ -327,7 +327,7 @@ Preferences & Config:
 If you plan to run the example notebooks or want interactive Matplotlib widgets inside Jupyter, install the notebooks extra which includes ipympl:
 
 ```bash
-pip install -e .[notebooks]
+pip install -e ".[notebooks]"
 ```
 
 In your notebook, enable the widget backend before plotting:
@@ -384,9 +384,9 @@ Troubleshooting “'widget' is not a recognised backend name”:
     - Output: `src/backend/docs/notebooks/capture_end_to_end.html`
   - Related docs: `src/backend/docs/data_capture_schemas.md`, `src/backend/docs/data_catalog_capture.md`
 
-- Stable DI notebook (SimulationSpec + Component Env)
+- Stable environment-construction notebook
   - Notebook: `notebooks/stable/di_simulation_spec_component_env.ipynb`
-  - Demonstrates DI factory (`create_component_environment`) and spec‑first composition via `SimulationSpec` + `prepare()`
+  - Demonstrates selector-based env construction and spec-first composition via `SimulationSpec` + `prepare()`
 
 ### Test and performance requirements
 
@@ -394,7 +394,7 @@ Running the full test matrix (contracts, property-based suites, and performance 
 
 ```bash
 # Add property-based testing and perf monitors
-pip install -e .[test,benchmark]
+pip install -e ".[test,benchmark]"
 ```
 
 This installs `hypothesis` (for property/contract suites) and `psutil` (for performance benchmarks). Without them, `pytest` will report import-time failures.
@@ -411,11 +411,22 @@ These policies are referenced by dataset ingest and loader components to ensure 
 
 ## 5. Architecture Overview
 
-- `plume_nav_sim.make_env()` → default environment
-- For `gym.make()`, call `ensure_registered()` and use `ENV_ID`.
-- `ComponentBasedEnvironment` → DI-powered core that consumes protocol-compliant components (`plume_nav_sim.interfaces`)
-- `plume_nav_sim.envs.factory.create_component_environment()` → factory with validation and curated defaults
+- `plume_nav_sim.make_env(...)` → canonical selector-based environment construction for static and movie plumes
+- `plume_nav_sim.EnvironmentConfig` and `create_environment_config(...)` → canonical env-init configuration
+- `plume_nav_sim.config.SimulationSpec`, `create_simulation_spec(...)`, and `prepare(...)` → spec-first composition
+- `PlumeEnv(...)` → direct component injection when you need custom plume, sensor, action, or reward objects
+- For `gym.make()`, call `ensure_registered()` and use `ENV_ID` (`PlumeNav-v0`)
 - `docs/extending/` → deep dives on protocols, wiring, and testing
+
+### Alpha Migration Notes
+
+This backend cleanup intentionally removed compatibility APIs that duplicated the active `PlumeEnv` construction path.
+
+- `plume_nav_sim.envs.factory.create_component_environment(...)` → use `plume_nav_sim.make_env(...)` for selector kwargs or `PlumeEnv(...)` for direct injection
+- `plume_nav_sim.config.ComponentEnvironmentConfig` and `plume_nav_sim.config.EnvironmentConfig` → use `plume_nav_sim.EnvironmentConfig`
+- `component_environment_config_to_spec(...)` → use `create_simulation_spec(...)`
+- `create_component_environment_from_config(...)` and `create_environment_from_config(...)` → use `build_env(create_simulation_spec(...))` or `prepare(...)`
+- `plume_type` and `video_*` kwargs → use `plume="static"|"movie"` and `movie_*` kwargs
 
 ## 6. Reproducibility Workflow
 
@@ -508,7 +519,7 @@ setup_logging(level="INFO", console=True)
 - Install the optional data extras to enable fast JSONL, Pandera validation, and Parquet export:
 
 ```bash
-pip install -e .[data]
+pip install -e ".[data]"
 ```
 
 This pulls in:
@@ -520,7 +531,7 @@ This pulls in:
 Notes:
 
 - JSONL.gz capture works without extras; extras are needed for validation/parquet.
-- Operational logging (loguru) is a separate optional extra: `pip install -e .[ops]`.
+- Operational logging (loguru) is a separate optional extra: `pip install -e ".[ops]"`.
 
 ### Validation and Parquet examples
 

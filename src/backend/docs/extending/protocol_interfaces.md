@@ -193,10 +193,10 @@ assert isinstance(CustomReward(...), RewardFunction)  # ✅ True
 ### Step 4: Use in Environment
 
 ```python
-from plume_nav_sim.envs import ComponentBasedEnvironment
+from plume_nav_sim.envs import PlumeEnv
 
-env = ComponentBasedEnvironment(
-    reward_function=CustomReward(...),  # ✅ Works!
+env = PlumeEnv(
+    reward_fn=CustomReward(...),  # ✅ Works!
     ...
 )
 ```
@@ -324,11 +324,11 @@ class MyReward:  # In separate package!
         return {"type": "my_custom_reward"}
 
 # Use it
-from plume_nav_sim.envs import ComponentBasedEnvironment
+from plume_nav_sim.envs import PlumeEnv
 from my_extensions.custom_rewards import MyReward
 
-env = ComponentBasedEnvironment(
-    reward_function=MyReward(),  # ✅ Works!
+env = PlumeEnv(
+    reward_fn=MyReward(),  # ✅ Works!
     ...
 )
 ```

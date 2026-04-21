@@ -70,12 +70,8 @@ class _FakeEnv:
         self.closed = True
 
 
-def _fail_make_env(**kwargs):
-    raise AssertionError(f"capture should not call pns.make_env: {kwargs}")
-
-
-def test_base_component_env_kwargs_wires_goal_radius_and_ignores_render() -> None:
-    kwargs = capture._base_component_env_kwargs(
+def test_base_selector_env_kwargs_wires_goal_radius_and_ignores_render() -> None:
+    kwargs = capture._base_selector_env_kwargs(
         {
             "goal_radius": 3.5,
             "render": True,
@@ -87,7 +83,7 @@ def test_base_component_env_kwargs_wires_goal_radius_and_ignores_render() -> Non
     assert "render_mode" not in kwargs
 
 
-def test_env_from_cfg_static_uses_component_factory(
+def test_env_from_cfg_static_uses_make_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     seen: dict[str, object] = {}
@@ -96,8 +92,7 @@ def test_env_from_cfg_static_uses_component_factory(
         seen["kwargs"] = kwargs
         return _FakeEnv(width=32, height=24)
 
-    monkeypatch.setattr(capture, "create_component_environment", fake_factory)
-    monkeypatch.setattr(capture.pns, "make_env", _fail_make_env)
+    monkeypatch.setattr(capture.pns, "make_env", fake_factory)
 
     env, width, height = capture._env_from_cfg(
         {
@@ -124,7 +119,7 @@ def test_env_from_cfg_static_uses_component_factory(
     }
 
 
-def test_env_from_cfg_movie_uses_component_factory(
+def test_env_from_cfg_movie_uses_make_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     seen: dict[str, object] = {}
@@ -133,8 +128,7 @@ def test_env_from_cfg_movie_uses_component_factory(
         seen["kwargs"] = kwargs
         return _FakeEnv(width=11, height=17)
 
-    monkeypatch.setattr(capture, "create_component_environment", fake_factory)
-    monkeypatch.setattr(capture.pns, "make_env", _fail_make_env)
+    monkeypatch.setattr(capture.pns, "make_env", fake_factory)
 
     env, width, height = capture._env_from_cfg(
         {
@@ -196,7 +190,7 @@ def test_capture_env_config_uses_goal_location_when_source_missing() -> None:
     assert cfg.goal_radius == 2.5
 
 
-def test_main_without_config_uses_component_factory(
+def test_main_without_config_uses_make_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     seen: dict[str, object] = {}
@@ -216,9 +210,8 @@ def test_main_without_config_uses_component_factory(
             "capture_cfg": capture_cfg,
         }
 
-    monkeypatch.setattr(capture, "create_component_environment", fake_factory)
+    monkeypatch.setattr(capture.pns, "make_env", fake_factory)
     monkeypatch.setattr(capture, "_run_capture", fake_run_capture)
-    monkeypatch.setattr(capture.pns, "make_env", _fail_make_env)
 
     exit_code = capture.main(
         [

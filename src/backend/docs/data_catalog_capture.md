@@ -13,7 +13,8 @@ Each capture run writes a versioned bundle under `results/<experiment>/<run_id>/
 - `episodes.jsonl.gz` – per‑episode summaries (newline‑delimited JSON, gzip)
 - Optional: `steps.parquet`, `episodes.parquet` – columnar export (requires `pyarrow`)
 
-All records include `schema_version` and are validated by Pandera. Current version: `1.0.0`.
+All records include `schema_version` and are validated by Pandera. Current version: `0.1`.
+Replay/debugger tooling consumes the JSONL.gz artifacts; parquet files are optional analysis exports.
 
 Reference: field‑level schemas are documented in `src/backend/docs/data_capture_schemas.md`.
 
@@ -49,7 +50,7 @@ Producers publish new versions via `dvc add` + `dvc push` or a staged pipeline. 
 Install the data extras to enable fast JSONL and validation:
 
 ```bash
-pip install -e .[data]
+pip install -e ".[data]"
 ```
 
 ### Pandas
@@ -121,11 +122,11 @@ Run it after capture; CI uses the same check (see plume_nav_sim-154).
 
 ## Schema Versioning and Compatibility
 
-- The `schema_version` field is present in all records. Current value is `1.0.0`.
+- The `schema_version` field is present in all records. Current value is `0.1`.
 - Backward‑compatible additions (new nullable fields) retain the minor version; breaking changes bump the major.
 - Consumers should:
   - Check `schema_version` on load and gate logic accordingly
-  - Prefer parquet exports for stable column naming and types
+  - Prefer parquet exports for analysis when stable column naming and types help
   - Use the Pandera validation to catch regressions early
 
 ## Governance

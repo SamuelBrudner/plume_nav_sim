@@ -1,62 +1,70 @@
 # Hydra Configuration Files
 
-This directory contains YAML configuration files for the component-config compatibility layer using [Hydra](https://hydra.cc/).
-For the canonical runtime config used by `PlumeEnv` and `make_env()`, prefer
-`plume_nav_sim.EnvironmentConfig`.
+This directory contains YAML examples for the canonical `SimulationSpec` shape used by `create_simulation_spec(...)`.
+The compatibility layer for nested component-style config mappings was removed, so configs should use the active top-level fields directly.
 
 ## Structure
 
 ```text
 conf/
-├── config.yaml              # Base config with defaults
-└── experiment/              # Experiment-specific configs
-    ├── sparse_simple.yaml   # Baseline: sparse reward + discrete actions
-    ├── dense_oriented.yaml  # Shaped reward + orientation
-    └── antennae_array.yaml  # Multi-sensor observation
+├── config.yaml                        # Base SimulationSpec-shaped defaults
+└── experiment/
+    ├── sparse_simple.yaml             # Baseline: sparse reward + discrete actions
+    ├── dense_oriented.yaml            # Oriented actions + step-penalty reward
+    ├── step_penalty_oriented.yaml     # Longer horizon step-penalty example
+    └── antennae_array.yaml            # Antennae observation example
 ```
+
+## Canonical Fields
+
+These YAML files map directly onto `plume_nav_sim.config.SimulationSpec`:
+
+- `grid_size`
+- `source_location`
+- `start_location`
+- `max_steps`
+- `goal_radius`
+- `plume_sigma`
+- `action_type`
+- `step_size`
+- `observation_type`
+- `reward_type`
+- `render`
+- `plume`
+- `movie_path`, `movie_dataset_id`, `movie_auto_download`, `movie_*`
+
+Use `plume: movie` together with `movie_*` fields for movie-backed datasets. Do not nest settings under `action`, `observation`, `reward`, or `plume` sub-mappings.
 
 ## Usage
 
-### Method 1: Direct Loading (Recommended for Scripts)
+### Direct Loading
 
 ```python
 from omegaconf import OmegaConf
-from plume_nav_sim.config import (
-    ComponentEnvironmentConfig,
-    create_component_environment_from_config,
+from plume_nav_sim.config import build_env, create_simulation_spec
+
+loaded = OmegaConf.to_container(
+    OmegaConf.load("conf/experiment/sparse_simple.yaml"),
+    resolve=True,
 )
-
-# Load YAML
-cfg_dict = OmegaConf.to_container(OmegaConf.load("conf/experiment/sparse_simple.yaml"))
-
-# Parse into Pydantic model (validates!)
-config = ComponentEnvironmentConfig(**cfg_dict)
-
-# Create environment
-env = create_component_environment_from_config(config)
+spec = create_simulation_spec(loaded)
+env = build_env(spec)
 ```
 
-### Method 2: Hydra Decorator (Recommended for Applications)
+### Hydra Decorator
 
 ```python
 import hydra
-from omegaconf import DictConfig
-from plume_nav_sim.config import (
-    ComponentEnvironmentConfig,
-    create_component_environment_from_config,
-)
+from omegaconf import DictConfig, OmegaConf
+from plume_nav_sim.config import build_env, create_simulation_spec
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
-def main(cfg: DictConfig):
-    # Convert to Pydantic (validates)
-    config = ComponentEnvironmentConfig(**cfg)
-    
-    # Create environment
-    env = create_component_environment_from_config(config)
-    
-    # Your training loop...
+def main(cfg: DictConfig) -> None:
+    loaded = OmegaConf.to_container(cfg, resolve=True)
+    spec = create_simulation_spec(loaded)
+    env = build_env(spec)
     obs, info = env.reset()
-    # ...
+    env.close()
 
 if __name__ == "__main__":
     main()
@@ -66,129 +74,81 @@ Run with:
 
 ```bash
 python train.py experiment=sparse_simple
-python train.py experiment=dense_oriented grid_size=[256,256]
+python train.py experiment=step_penalty_oriented grid_size=[256,256]
 ```
 
-### Method 3: Programmatic Override
+### Programmatic Override
 
 ```python
 from hydra import compose, initialize
-from plume_nav_sim.config import (
-    ComponentEnvironmentConfig,
-    create_component_environment_from_config,
-)
+from omegaconf import OmegaConf
+from plume_nav_sim.config import build_env, create_simulation_spec
 
 with initialize(version_base=None, config_path="conf"):
-    cfg = compose(config_name="config", overrides=[
-        "experiment=sparse_simple",
-        "max_steps=2000",
-        "action.step_size=2"
-    ])
-    
-    config = ComponentEnvironmentConfig(**cfg)
-    env = create_component_environment_from_config(config)
+    cfg = compose(
+        config_name="config",
+        overrides=[
+            "experiment=sparse_simple",
+            "max_steps=2000",
+            "step_size=2",
+        ],
+    )
+    spec = create_simulation_spec(OmegaConf.to_container(cfg, resolve=True))
+    env = build_env(spec)
 ```
 
-## Configuration Options
+## Example Custom Config
 
-### Environment Settings
-
-- `grid_size`: `[width, height]` - Environment dimensions
-- `goal_location`: `[x, y]` - Target position
-- `start_location`: `[x, y]` or `null` - Initial position (null = center)
-- `max_steps`: int - Episode step limit
-- `render_mode`: `"rgb_array"`, `"human"`, or `null`
-
-### Action Processor (`action`)
-
-- `type`: `"discrete"` (4-dir) or `"oriented"` (3-action)
-- `step_size`: int - Movement distance per step
-
-### Observation Model (`observation`)
-
-- `type`: `"concentration"` (single) or `"antennae"` (array)
-- `n_sensors`: int - Number of sensors (antennae only)
-- `sensor_distance`: float - Distance from agent (antennae only)
-- `sensor_angles`: list[float] or null - Custom angles (antennae only)
-
-### Reward Function (`reward`)
-
-- `type`: `"sparse"` (binary) or `"dense"` (shaped)
-- `goal_radius`: float - Success threshold distance
-- `distance_weight`: float - Weight for distance term (dense only)
-- `concentration_weight`: float - Weight for concentration term (dense only)
-
-### Plume Field (`plume`)
-
-- `sigma`: float - Gaussian dispersion parameter
-- `normalize`: bool - Normalize to [0, 1]
-- `enable_caching`: bool - Cache concentration lookups
-
-## Creating Custom Configs
-
-1. Copy an existing experiment config
-2. Modify parameters
-3. Save to `conf/experiment/my_experiment.yaml`
-4. Use with `experiment=my_experiment`
-
-Example custom config:
 ```yaml
 # conf/experiment/my_experiment.yaml
 # @package _global_
 
 grid_size: [256, 256]
-goal_location: [200, 200]
+source_location: [200, 200]
 max_steps: 5000
-
-action:
-  type: discrete
-  step_size: 3
-
-observation:
-  type: antennae
-  n_sensors: 6
-  sensor_distance: 3.0
-
-reward:
-  type: dense
-  goal_radius: 15.0
-
-plume:
-  sigma: 30.0
+goal_radius: 15.0
+plume_sigma: 30.0
+action_type: oriented
+step_size: 3
+observation_type: antennae
+reward_type: step_penalty
+render: false
 ```
 
 ## Validation
 
-Pydantic validates all configs automatically:
+Use the lightweight canonical environment config when you only need env-init validation:
+
 ```python
-config = EnvironmentConfig(**cfg)  # Raises ValidationError if invalid
+from plume_nav_sim import create_environment_config
+
+config = create_environment_config(
+    {
+        "grid_size": [128, 128],
+        "source_location": [64, 64],
+        "max_steps": 1000,
+        "goal_radius": 5.0,
+        "plume_params": {"sigma": 20.0},
+    }
+)
 ```
 
-Common validation errors:
-- `goal_location` outside `grid_size` bounds
-- Negative or zero `step_size`, `sigma`, `goal_radius`
-- Invalid `type` values
-- `sensor_angles` length doesn't match `n_sensors`
+Use `create_simulation_spec(...)` when validating the full selector-based runtime config.
 
 ## Best Practices
 
-1. **Use experiment configs**: Override base `config.yaml` with experiment-specific settings
-2. **Validate early**: Load config at script start to catch errors immediately
-3. **Version control**: Commit config files alongside code
-4. **Experiment tracking**: Log the full config with your experiment results
-5. **Sweeps**: Use Hydra multirun for hyperparameter sweeps
-
-Example sweep:
-```bash
-python train.py -m experiment=sparse_simple action.step_size=1,2,3 plume.sigma=10,20,30
-```
+1. Use experiment configs as small overrides over `config.yaml`.
+2. Validate configs before starting long runs.
+3. Keep movie plume settings in `movie_*` fields so they round-trip cleanly through `SimulationSpec`.
+4. Prefer `prepare(...)` or `build_env(...)` over ad hoc constructor branching in application code.
+5. Commit config changes alongside code and test updates.
 
 ## See Also
 
 - [Hydra Documentation](https://hydra.cc/docs/intro/)
 - [OmegaConf Documentation](https://omegaconf.readthedocs.io/)
-- `plume_nav_sim/config/component_configs.py` - Pydantic model definitions
-- `docs/MIGRATION_COMPONENT_ENV.md` - Component-based environment guide
-- External plug‑and‑play, config‑based DI:
-  - `plug-and-play-demo/README.md` (section: "Config‑based DI via SimulationSpec")
-  - `plug-and-play-demo/configs/simulation_spec.json` (example spec)
+- `plume_nav_sim.config.SimulationSpec`
+- `plume_nav_sim.EnvironmentConfig`
+- External plug-and-play, spec-first usage:
+  - `plug-and-play-demo/README.md` (section: "Config-based composition")
+  - `plug-and-play-demo/configs/simulation_spec.json`

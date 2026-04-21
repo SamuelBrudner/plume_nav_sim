@@ -1,93 +1,110 @@
 from __future__ import annotations
 
-import pytest
-
 import plume_nav_sim as pns
 import plume_nav_sim.config as config_api
-from plume_nav_sim.config import (
-    ActionConfig,
-    ComponentEnvironmentConfig,
-    ObservationConfig,
-    PlumeConfig,
-    RewardConfig,
-    WindConfig,
-    component_environment_config_to_kwargs,
-    create_environment_from_config,
-    get_default_component_environment_config,
-    get_default_environment_config,
-)
+import pytest
+
+from plume_nav_sim.config import SimulationSpec, build_env, create_simulation_spec
 from plume_nav_sim.envs.config_types import EnvironmentConfig as CanonicalEnvironmentConfig
-from plume_nav_sim.observations import WindVectorSensor
-from plume_nav_sim.rewards import StepPenaltyReward
 
 
-def test_canonical_and_component_config_surfaces_are_distinct() -> None:
+def test_config_public_surface_exports_canonical_environment_config() -> None:
     assert pns.EnvironmentConfig is CanonicalEnvironmentConfig
-    assert config_api.ComponentEnvironmentConfig is not CanonicalEnvironmentConfig
-    assert issubclass(config_api.EnvironmentConfig, config_api.ComponentEnvironmentConfig)
+    assert config_api.EnvironmentConfig is CanonicalEnvironmentConfig
+    assert isinstance(config_api.get_default_environment_config(), CanonicalEnvironmentConfig)
 
 
-def test_component_environment_config_alias_warns_on_instantiation() -> None:
-    with pytest.warns(DeprecationWarning, match="plume_nav_sim\\.config\\.EnvironmentConfig is deprecated"):
-        config = config_api.EnvironmentConfig()
+def test_removed_component_config_surfaces_are_absent() -> None:
+    removed_symbols = [
+        "ComponentEnvironmentConfig",
+        "component_environment_config_to_spec",
+        "component_environment_config_to_kwargs",
+        "create_component_environment_from_config",
+        "create_environment_from_config",
+        "get_default_component_environment_config",
+    ]
 
-    assert isinstance(config, config_api.ComponentEnvironmentConfig)
-    assert not isinstance(config, CanonicalEnvironmentConfig)
-
-
-def test_default_config_helpers_split_canonical_and_component_roles() -> None:
-    canonical = get_default_environment_config()
-    component = get_default_component_environment_config()
-
-    assert isinstance(canonical, CanonicalEnvironmentConfig)
-    assert isinstance(component, ComponentEnvironmentConfig)
+    for name in removed_symbols:
+        assert not hasattr(config_api, name), f"{name} should not be exported"
 
 
-def test_component_config_adapter_normalizes_explicit_env_kwargs() -> None:
-    config = ComponentEnvironmentConfig(
-        grid_size=(32, 24),
-        goal_location=(5, 6),
-        start_location=(1, 2),
-        max_steps=77,
-        action=ActionConfig(type="discrete", step_size=3),
-        observation=ObservationConfig(type="wind_vector", noise_std=0.15),
-        reward=RewardConfig(
-            type="step_penalty",
-            goal_radius=2.5,
-            goal_reward=3.0,
-            step_penalty=0.2,
-        ),
-        plume=PlumeConfig(sigma=11.0),
-        wind=WindConfig(direction_deg=90.0, speed=2.0),
+def test_create_simulation_spec_accepts_canonical_environment_config() -> None:
+    config = CanonicalEnvironmentConfig(
+        grid_size=(8, 10),
+        source_location=(3, 4),
+        max_steps=12,
+        goal_radius=1.5,
+        plume_params={"sigma": 6.0},
+        enable_rendering=False,
     )
 
-    kwargs = component_environment_config_to_kwargs(config)
+    spec = create_simulation_spec(config)
 
-    assert kwargs["grid_size"].to_tuple() == (32, 24)
-    assert kwargs["goal_location"].to_tuple() == (5, 6)
-    assert kwargs["start_location"].to_tuple() == (1, 2)
-    assert kwargs["max_steps"] == 77
-    assert kwargs["render_mode"] is None
-    assert isinstance(kwargs["observation_model"], WindVectorSensor)
-    assert isinstance(kwargs["reward_function"], StepPenaltyReward)
-    assert kwargs["wind_field"] is not None
+    assert spec.grid_size == (8, 10)
+    assert spec.source_location == (3, 4)
+    assert spec.max_steps == 12
+    assert spec.goal_radius == 1.5
+    assert spec.plume_sigma == 6.0
+    assert spec.render is False
 
 
-def test_deprecated_factory_alias_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
-    config = ComponentEnvironmentConfig()
-    seen: dict[str, object] = {}
-
-    def _fake_create_component_environment_from_config(config_obj: object) -> str:
-        seen["config"] = config_obj
-        return "sentinel"
-
-    monkeypatch.setattr(
-        "plume_nav_sim.config.factories.create_component_environment_from_config",
-        _fake_create_component_environment_from_config,
+def test_create_simulation_spec_accepts_canonical_mapping() -> None:
+    spec = create_simulation_spec(
+        {
+            "grid_size": [16, 12],
+            "source_location": [5, 6],
+            "max_steps": 40,
+            "goal_radius": 2.5,
+            "plume_params": {"sigma": 9.0},
+            "enable_rendering": False,
+            "action_type": "run_tumble",
+            "step_size": 2,
+        }
     )
 
-    with pytest.warns(DeprecationWarning, match="create_environment_from_config is deprecated"):
-        result = create_environment_from_config(config)
+    assert spec.grid_size == (16, 12)
+    assert spec.source_location == (5, 6)
+    assert spec.max_steps == 40
+    assert spec.goal_radius == 2.5
+    assert spec.plume_sigma == 9.0
+    assert spec.render is False
+    assert spec.action_type == "run_tumble"
+    assert spec.step_size == 2
 
-    assert result == "sentinel"
-    assert seen["config"] is config
+
+def test_create_simulation_spec_rejects_component_style_mapping() -> None:
+    with pytest.raises(ValueError, match="component-style config mappings"):
+        create_simulation_spec(
+            {
+                "grid_size": [64, 48],
+                "goal_location": [9, 8],
+                "action": {"type": "run_tumble", "step_size": 2},
+            }
+        )
+
+
+def test_build_env_still_constructs_from_canonical_simulation_spec() -> None:
+    env = build_env(
+        SimulationSpec(
+            grid_size=(12, 12),
+            source_location=(4, 5),
+            max_steps=9,
+            action_type="oriented",
+            step_size=2,
+            observation_type="wind_vector",
+            wind_noise_std=0.25,
+            enable_wind=True,
+            wind_direction_deg=45.0,
+            wind_speed=1.5,
+            render=False,
+            render_mode="human",
+        )
+    )
+
+    try:
+        assert env.render_mode == "human"
+        assert getattr(env.action_model, "step_size", None) == 2
+        assert getattr(env.sensor_model, "noise_std", None) == 0.25
+        assert env.wind_field is not None
+    finally:
+        env.close()

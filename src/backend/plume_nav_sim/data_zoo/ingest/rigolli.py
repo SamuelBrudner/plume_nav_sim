@@ -101,7 +101,7 @@ def _try_load_coords_with_scipy(
 ) -> tuple[Any, Any] | None:
     try:
         from scipy.io import loadmat
-    except Exception as exc:  # pragma: no cover - scipy is optional
+    except ImportError as exc:  # pragma: no cover - scipy is optional
         errors.append(exc)
         return None
 
@@ -396,4 +396,3 @@ def _ingest_mat_to_zarr(
         raise DatasetDownloadError(
             f"Failed to ingest MATLAB file {source_path} into Zarr: {exc}"
         ) from exc
-

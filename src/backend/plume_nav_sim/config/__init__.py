@@ -1,15 +1,6 @@
-"""Compatibility-heavy config helpers plus the canonical env-config constructor."""
+"""Canonical config helpers for plume_nav_sim."""
 
-from ..envs.config_types import create_environment_config
-from .component_configs import (
-    ActionConfig,
-    ComponentEnvironmentConfig,
-    EnvironmentConfig,
-    ObservationConfig,
-    PlumeConfig,
-    RewardConfig,
-    WindConfig,
-)
+from ..envs.config_types import EnvironmentConfig, create_environment_config
 from .composition import (
     BuiltinPolicyName,
     LoadedPolicy,
@@ -17,24 +8,14 @@ from .composition import (
     SimulationSpec,
     build_env,
     build_policy,
+    create_simulation_spec,
     load_policy,
     prepare,
     reset_policy_if_possible,
 )
 from .defaults import (
     get_complete_default_config,
-    get_default_component_environment_config,
     get_default_environment_config,
-)
-from .factories import (
-    component_environment_config_to_kwargs,
-    create_action_processor,
-    create_concentration_field,
-    create_component_environment_from_config,
-    create_environment_from_config,
-    create_observation_model,
-    create_reward_function,
-    create_wind_field,
 )
 from .registration import (
     ENV_ID,
@@ -54,33 +35,17 @@ from .testing_configs import (
 )
 
 __all__ = [
-    # Component configs
-    "ActionConfig",
-    "ObservationConfig",
-    "RewardConfig",
-    "PlumeConfig",
-    "WindConfig",
-    "ComponentEnvironmentConfig",
     "EnvironmentConfig",
     "create_environment_config",
-    # Factory functions
-    "create_action_processor",
-    "create_observation_model",
-    "create_reward_function",
-    "create_concentration_field",
-    "create_wind_field",
-    "component_environment_config_to_kwargs",
-    "create_component_environment_from_config",
-    "create_environment_from_config",
     # Defaults
     "get_complete_default_config",
     "get_default_environment_config",
-    "get_default_component_environment_config",
     # Composition helpers and specs
     "BuiltinPolicyName",
     "LoadedPolicy",
     "PolicySpec",
     "SimulationSpec",
+    "create_simulation_spec",
     "load_policy",
     "reset_policy_if_possible",
     "build_env",

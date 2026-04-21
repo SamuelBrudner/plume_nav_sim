@@ -45,6 +45,7 @@ class StepRecord:
     distance_to_goal: float
     observation_summary: Optional[list[float]] = None
     seed: Optional[int] = None
+    schema_version: str = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -62,6 +63,7 @@ class EpisodeRecord:
     final_distance_to_goal: float
     duration_ms: Optional[float] = None
     avg_step_time_ms: Optional[float] = None
+    schema_version: str = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
         return asdict(self)

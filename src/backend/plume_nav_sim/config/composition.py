@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import contextlib
 from dataclasses import dataclass
 from importlib import import_module
 from types import ModuleType
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple
 
 from pydantic import (
     BaseModel,
@@ -16,7 +15,7 @@ from pydantic import (
 )
 
 from plume_nav_sim._compat import is_space_subset
-from plume_nav_sim.envs import create_component_environment
+from plume_nav_sim.envs.factory import _create_plume_env_from_selectors
 
 # ===== Specs =====
 
@@ -76,9 +75,16 @@ class SimulationSpec(BaseModel):
     plume_sigma: Optional[float] = Field(default=None, ge=0.0)
     max_steps: Optional[PositiveInt] = Field(default=None)
     action_type: Optional[str] = Field(default=None)
+    step_size: Optional[PositiveInt] = Field(default=None)
     observation_type: Optional[str] = Field(default=None)
+    wind_noise_std: Optional[float] = Field(default=None, ge=0.0)
     reward_type: Optional[str] = Field(default=None)
-    render: bool = Field(default=True)
+    render: bool = Field(default=False)
+    render_mode: Optional[Literal["rgb_array", "human"]] = Field(default=None)
+    enable_wind: Optional[bool] = Field(default=None)
+    wind_direction_deg: Optional[float] = Field(default=None)
+    wind_speed: Optional[float] = Field(default=None, ge=0.0)
+    wind_vector: Optional[Tuple[float, float]] = Field(default=None)
     plume: Optional[Literal["static", "movie"]] = Field(default=None)
     movie_path: Optional[str] = Field(default=None)
     movie_dataset_id: Optional[str] = Field(default=None)
@@ -108,6 +114,85 @@ class SimulationSpec(BaseModel):
     policy: PolicySpec = Field(
         default_factory=lambda: PolicySpec(builtin="deterministic_td")
     )
+
+
+_REMOVED_COMPONENT_CONFIG_MAPPING_KEYS = frozenset(
+    {"action", "observation", "reward", "goal_location", "render_mode", "wind"}
+)
+_CANONICAL_ENV_CONFIG_FIELDS = frozenset(
+    {
+        "grid_size",
+        "source_location",
+        "max_steps",
+        "goal_radius",
+        "plume_params",
+        "enable_rendering",
+    }
+)
+_CANONICAL_ENV_CONFIG_HINT_KEYS = frozenset(
+    {"source_location", "plume_params", "enable_rendering"}
+)
+_IGNORED_CONFIG_MAPPING_KEYS = frozenset({"defaults", "hydra"})
+
+
+def create_simulation_spec(
+    config: SimulationSpec | Mapping[str, Any] | object | None = None,
+    **overrides: Any,
+) -> SimulationSpec:
+    """Create a canonical SimulationSpec from spec-shaped or canonical config data."""
+
+    from plume_nav_sim.envs.config_types import (
+        EnvironmentConfig as CanonicalEnvironmentConfig,
+        create_environment_config,
+    )
+
+    if isinstance(config, SimulationSpec):
+        if not overrides:
+            return config
+        payload = config.model_dump(exclude_none=True)
+        payload.update(overrides)
+        return SimulationSpec.model_validate(payload)
+
+    if isinstance(config, CanonicalEnvironmentConfig):
+        payload = config.to_simulation_spec().model_dump(exclude_none=True)
+        payload.update(overrides)
+        return SimulationSpec.model_validate(payload)
+
+    if config is None:
+        return SimulationSpec.model_validate(overrides)
+
+    if not isinstance(config, Mapping):
+        raise TypeError(
+            "config must be a SimulationSpec, mapping, EnvironmentConfig, or None"
+        )
+
+    payload = {
+        key: value
+        for key, value in dict(config).items()
+        if key not in _IGNORED_CONFIG_MAPPING_KEYS
+    }
+    payload.update(overrides)
+
+    removed_keys = sorted(_REMOVED_COMPONENT_CONFIG_MAPPING_KEYS.intersection(payload))
+    if removed_keys:
+        raise ValueError(
+            "component-style config mappings are no longer supported; "
+            "use SimulationSpec fields directly"
+        )
+
+    if _CANONICAL_ENV_CONFIG_HINT_KEYS.intersection(payload):
+        canonical_payload = {
+            key: value for key, value in payload.items() if key in _CANONICAL_ENV_CONFIG_FIELDS
+        }
+        spec_payload = {
+            key: value for key, value in payload.items() if key not in _CANONICAL_ENV_CONFIG_FIELDS
+        }
+        canonical = create_environment_config(canonical_payload)
+        merged_payload = canonical.to_simulation_spec().model_dump(exclude_none=True)
+        merged_payload.update(spec_payload)
+        return SimulationSpec.model_validate(merged_payload)
+
+    return SimulationSpec.model_validate(payload)
 
 
 # ===== Policy loading helpers =====
@@ -145,8 +230,11 @@ def _import_longest_prefix(dotted: str) -> tuple[ModuleType, Optional[str]]:
             mod = _import_module(mod_name)
             remainder = ".".join(parts[i:]) if i < len(parts) else None
             return mod, (remainder or None)
-        except ModuleNotFoundError:
-            continue
+        except ModuleNotFoundError as exc:
+            missing = exc.name or ""
+            if missing == mod_name or mod_name.startswith(missing + "."):
+                continue
+            raise
     # Fall back to plain import error
     raise ModuleNotFoundError(f"No importable module prefix found in '{dotted}'")
 
@@ -191,8 +279,9 @@ def load_policy(spec: str, *, kwargs: Optional[dict] = None) -> LoadedPolicy:
 
 
 def reset_policy_if_possible(obj: Any, *, seed: Optional[int]) -> None:
-    with contextlib.suppress(Exception):
-        obj.reset(seed=seed)  # type: ignore[attr-defined]
+    reset = getattr(obj, "reset", None)
+    if callable(reset):
+        reset(seed=seed)
 
 
 # ===== Builders =====
@@ -223,7 +312,7 @@ def _add_if_not_none(
     kwargs[key] = transform(value) if transform is not None else value
 
 
-def _build_component_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
+def _build_selector_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
     kwargs: dict[str, Any] = {}
     _add_if_not_none(kwargs, "grid_size", spec.grid_size, tuple)
     _add_if_not_none(kwargs, "goal_location", spec.source_location, tuple)
@@ -231,8 +320,14 @@ def _build_component_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any
     _add_if_not_none(kwargs, "goal_radius", spec.goal_radius, float)
     _add_if_not_none(kwargs, "max_steps", spec.max_steps, int)
     _add_if_not_none(kwargs, "action_type", spec.action_type)
+    _add_if_not_none(kwargs, "step_size", spec.step_size, int)
     _add_if_not_none(kwargs, "observation_type", spec.observation_type)
+    _add_if_not_none(kwargs, "wind_noise_std", spec.wind_noise_std, float)
     _add_if_not_none(kwargs, "reward_type", spec.reward_type)
+    _add_if_not_none(kwargs, "enable_wind", spec.enable_wind, bool)
+    _add_if_not_none(kwargs, "wind_direction_deg", spec.wind_direction_deg, float)
+    _add_if_not_none(kwargs, "wind_speed", spec.wind_speed, float)
+    _add_if_not_none(kwargs, "wind_vector", spec.wind_vector, tuple)
 
     if spec.plume_sigma is not None:
         kwargs["plume_sigma"] = float(spec.plume_sigma)
@@ -266,16 +361,17 @@ def _build_component_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any
     _add_if_not_none(kwargs, "movie_normalize", spec.movie_normalize)
     _add_if_not_none(kwargs, "movie_chunks", spec.movie_chunks)
 
-    if spec.render:
+    if spec.render_mode is not None:
+        kwargs["render_mode"] = spec.render_mode
+    elif spec.render:
         kwargs["render_mode"] = "rgb_array"
 
     return kwargs
 
 
 def build_env(spec: SimulationSpec):
-    kwargs = _build_component_env_kwargs_from_spec(spec)
-    kwargs["warn_deprecated"] = False
-    return create_component_environment(**kwargs)
+    kwargs = _build_selector_env_kwargs_from_spec(spec)
+    return _create_plume_env_from_selectors(**kwargs)
 
 
 def _make_random_sampler(env) -> Any:
@@ -371,6 +467,7 @@ __all__ = [
     "BuiltinPolicyName",
     "PolicySpec",
     "SimulationSpec",
+    "create_simulation_spec",
     # Policy loading helpers
     "LoadedPolicy",
     "load_policy",

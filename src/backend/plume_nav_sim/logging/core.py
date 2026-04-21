@@ -12,7 +12,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 
 try:  # pragma: no cover - optional dependency
     from loguru import logger as _loguru_logger
-except Exception:  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     _loguru_logger = None  # type: ignore
 
 LOGGER_NAME_PREFIX = "plume_nav_sim"

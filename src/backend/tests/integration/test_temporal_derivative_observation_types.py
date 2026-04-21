@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from plume_nav_sim.envs.factory import create_component_environment
+from plume_nav_sim import make_env
 from plume_nav_sim.policies import TemporalDerivativePolicy
 
 
 def test_temporal_derivative_requires_sensor_index_for_antennae():
-    env = create_component_environment(
+    env = make_env(
         action_type="oriented",
         observation_type="antennae",
         reward_type="sparse",
@@ -23,7 +23,7 @@ def test_temporal_derivative_requires_sensor_index_for_antennae():
 
 
 def test_temporal_derivative_can_select_antenna_with_sensor_index():
-    env = create_component_environment(
+    env = make_env(
         action_type="oriented",
         observation_type="antennae",
         reward_type="sparse",
@@ -40,7 +40,7 @@ def test_temporal_derivative_can_select_antenna_with_sensor_index():
 
 
 def test_temporal_derivative_errors_on_wind_vector_observation():
-    env = create_component_environment(
+    env = make_env(
         action_type="oriented",
         observation_type="wind_vector",
         reward_type="sparse",

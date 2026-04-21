@@ -112,7 +112,7 @@ class RunRecorder:
         try:
             import pyarrow as pa  # type: ignore
             import pyarrow.parquet as pq  # type: ignore
-        except Exception:
+        except ImportError:
             return
 
         for stem in ("steps", "episodes"):

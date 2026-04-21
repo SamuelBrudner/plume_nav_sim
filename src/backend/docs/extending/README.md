@@ -21,7 +21,7 @@ For an overview of the public API surface and where code lives in the repository
   - Type expectations, required methods, and validation semantics.
 
 - **Component Injection Guide** → `docs/extending/component_injection.md`
-  - How DI wiring works inside `ComponentBasedEnvironment`.
+  - How DI wiring works inside `PlumeEnv`.
   - Manually assembling environments and registering them with Gymnasium.
   - Real example: `src/backend/examples/custom_components.py`.
 
@@ -39,21 +39,21 @@ For an overview of the public API surface and where code lives in the repository
 
 ```python
 import plume_nav_sim as pns
-from plume_nav_sim.envs.component_env import ComponentBasedEnvironment
+from plume_nav_sim.envs import PlumeEnv
 
 env = pns.make_env()
-base = env.unwrapped  # ComponentBasedEnvironment
+base = env.unwrapped  # PlumeEnv
 env.close()
 
 # Assemble your own environment
-custom_env = ComponentBasedEnvironment(
-    action_processor=my_action_processor,
-    observation_model=my_observation_model,
-    reward_function=my_reward_function,
-    concentration_field=my_plume_model,
-    grid_size=base.grid_size,
-    goal_location=base.goal_location,
+custom_env = PlumeEnv(
+    grid_size=base._grid_size,
+    source_location=base.goal_location,
     goal_radius=base.goal_radius,
+    plume=my_plume_model,
+    action_model=my_action_processor,
+    sensor_model=my_observation_model,
+    reward_fn=my_reward_function,
 )
 ```
 

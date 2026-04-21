@@ -235,7 +235,7 @@ Prerequisites
 - Install data extras to enable validation and Parquet:
 
 ```bash
-pip install -e src/backend[data]
+pip install -e "src/backend[data]"
 ```
 
 Quick start (CLI)

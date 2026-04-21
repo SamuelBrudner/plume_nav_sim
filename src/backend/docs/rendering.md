@@ -7,8 +7,7 @@ There is **no separate `render/` package** — the legacy renderer was removed.
 
 ## Supported Modes
 
-Both `PlumeEnv` and `ComponentBasedEnvironment` support the standard Gymnasium
-`render()` interface:
+`PlumeEnv` supports the standard Gymnasium `render()` interface:
 
 | Mode | Behavior |
 |------|----------|
@@ -51,7 +50,6 @@ Frames can be saved to disk or assembled into video with external tools.
 ## Implementation Locations
 
 - `PlumeEnv.render()` → `src/backend/plume_nav_sim/envs/plume_env.py`
-- `ComponentBasedEnvironment.render()` → `src/backend/plume_nav_sim/envs/component_env.py`
 - `DataCaptureWrapper.render()` → `src/backend/plume_nav_sim/data_capture/wrapper.py`
 
 ## Recording Video

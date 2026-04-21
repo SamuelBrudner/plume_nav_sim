@@ -6,13 +6,13 @@ These tests compare action sequences between a manual loop (policy.select_action
 and the UI-agnostic runner.stream() with the same seed and deterministic policy.
 """
 
-from plume_nav_sim.envs import create_component_environment
+from plume_nav_sim import make_env
 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
 from plume_nav_sim.runner import runner as r
 
 
 def _create_env(*, rgb: bool = False):
-    return create_component_environment(
+    return make_env(
         grid_size=(64, 64),
         goal_location=(48, 48),
         start_location=(16, 16),

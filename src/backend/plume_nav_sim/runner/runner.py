@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 from dataclasses import dataclass
@@ -121,11 +122,17 @@ def _reset_env_and_policy(
 
 
 def _maybe_policy_reset(policy: Any, *, seed: Optional[int]) -> None:
+    reset = getattr(policy, "reset", None)
+    if callable(reset):
+        reset(seed=seed)
+
+
+def _select_action_supports_explore_kwarg(select_action: Callable[..., Any]) -> bool:
     try:
-        policy.reset(seed=seed)  # type: ignore[attr-defined]
-    except Exception:
-        # If policy has no reset or incompatible signature, ignore
-        pass
+        signature = inspect.signature(select_action)
+    except (TypeError, ValueError):
+        return False
+    return "explore" in signature.parameters
 
 
 def _select_action(
@@ -135,10 +142,10 @@ def _select_action(
 
     # Prefer select_action if available (Policy protocol)
     if hasattr(policy, "select_action"):
-        try:
-            return policy.select_action(policy_input, explore=False)  # type: ignore[attr-defined]
-        except TypeError:
-            return policy.select_action(policy_input)  # type: ignore[misc]
+        select_action = policy.select_action  # type: ignore[attr-defined]
+        if _select_action_supports_explore_kwarg(select_action):
+            return select_action(policy_input, explore=False)
+        return select_action(policy_input)
     # Fallback to callable policy
     if callable(policy):
         return policy(policy_input)

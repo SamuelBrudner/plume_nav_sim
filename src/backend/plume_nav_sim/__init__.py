@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from typing import Any, Dict, Mapping, Optional
 
 from .core import (
@@ -40,52 +39,29 @@ from ._compat import ValidationError
 # Predeclare symbols with precise optional types to satisfy mypy strict rules.
 PlumeEnv: Optional[object]
 create_plume_env: Optional[object]
-create_component_environment: Optional[object]
 _ENV_IMPORT_ERROR: Optional[Exception] = None
-_COMPATIBILITY_COMPONENT_KEYS = frozenset(
-    {
-        "action_type",
-        "observation_type",
-        "reward_type",
-        "plume_sigma",
-        "step_size",
-        "enable_wind",
-        "wind_direction_deg",
-        "wind_speed",
-        "wind_vector",
-        "wind_noise_std",
-    }
+_DIRECT_INJECTION_KEYS = frozenset(
+    {"sensor_model", "action_model", "reward_fn", "video_config"}
 )
-_COMPATIBILITY_COMPONENT_PREFIXES = ("movie_",)
-_STABLE_ONLY_ENV_KEYS = frozenset(
-    {
-        "plume_type",
-        "sensor_model",
-        "action_model",
-        "reward_fn",
-        "video_path",
-        "video_data",
-        "video_fps",
-        "video_pixel_to_grid",
-        "video_origin",
-        "video_extent",
-        "video_step_policy",
-        "video_config",
-    }
-)
-
+_REMOVED_MAKE_ENV_ALIASES = {
+    "plume_type": "Use plume='static' or plume='movie'.",
+    "video_path": "Use movie_path instead.",
+    "video_fps": "Use movie_fps instead.",
+    "video_pixel_to_grid": "Use movie_pixel_to_grid instead.",
+    "video_origin": "Use movie_origin instead.",
+    "video_extent": "Use movie_extent instead.",
+    "video_step_policy": "Use movie_step_policy instead.",
+    "video_data": "Use movie_data instead.",
+}
 try:
     from .envs import PlumeEnv as _PlumeEnv
-    from .envs import create_component_environment as _create_component_environment
     from .envs import create_plume_env as _create_plume_env
 
     PlumeEnv = _PlumeEnv
     create_plume_env = _create_plume_env
-    create_component_environment = _create_component_environment
-except Exception as env_import_error:  # pragma: no cover - optional dependency guard
+except ImportError as env_import_error:  # pragma: no cover - optional dependency guard
     PlumeEnv = None
     create_plume_env = None
-    create_component_environment = None
     _ENV_IMPORT_ERROR = env_import_error
 
 
@@ -180,8 +156,6 @@ def get_package_info(
             environment_details["available"].append("PlumeEnv")
             environment_details["factory"] = "create_plume_env"
             environment_details["module"] = "plume_nav_sim.envs.plume_env"
-        if create_component_environment is not None:
-            environment_details["available"].append("ComponentBasedEnvironment")
         if not environment_details["available"]:
             environment_details["error"] = str(_ENV_IMPORT_ERROR)
 
@@ -198,132 +172,68 @@ def get_package_info(
     return info
 
 
-def _compatibility_component_keys(kwargs: Mapping[str, object]) -> set[str]:
-    keys = {key for key in kwargs if key in _COMPATIBILITY_COMPONENT_KEYS}
-    keys.update(
-        key
-        for key in kwargs
-        if any(key.startswith(prefix) for prefix in _COMPATIBILITY_COMPONENT_PREFIXES)
+def _normalize_make_env_kwargs(kwargs: Mapping[str, object]) -> dict[str, Any]:
+    selector_kwargs: dict[str, Any] = dict(kwargs)
+
+    removed_aliases = sorted(
+        key for key in selector_kwargs if key in _REMOVED_MAKE_ENV_ALIASES
     )
-    return keys
-
-
-def _stable_only_keys(kwargs: Mapping[str, object]) -> set[str]:
-    keys = {key for key in kwargs if key in _STABLE_ONLY_ENV_KEYS}
-    plume_value = kwargs.get("plume")
-    if "plume" in kwargs and not isinstance(plume_value, str):
-        keys.add("plume")
-    return keys
-
-
-def _classify_make_env_kwargs(kwargs: Mapping[str, object]) -> str:
-    compatibility_keys = _compatibility_component_keys(kwargs)
-    stable_keys = _stable_only_keys(kwargs)
-    if compatibility_keys and stable_keys:
+    if removed_aliases:
+        alias = removed_aliases[0]
         raise ValidationError(
-            "Cannot mix deprecated component kwargs with stable PlumeEnv kwargs",
-            parameter_name="kwargs",
-            parameter_value=sorted(compatibility_keys | stable_keys),
-            context={
-                "deprecated_component_kwargs": sorted(compatibility_keys),
-                "stable_plume_env_kwargs": sorted(stable_keys),
-            },
+            f"{alias} is no longer supported by make_env(). {_REMOVED_MAKE_ENV_ALIASES[alias]}",
+            parameter_name=alias,
+            parameter_value=selector_kwargs.get(alias),
         )
-    return "component" if compatibility_keys else "stable"
 
+    forbidden_keys = sorted(key for key in selector_kwargs if key in _DIRECT_INJECTION_KEYS)
+    plume_value = selector_kwargs.get("plume")
+    if "plume" in selector_kwargs and plume_value is not None and not isinstance(
+        plume_value, str
+    ):
+        forbidden_keys.append("plume")
+    if forbidden_keys:
+        raise ValidationError(
+            "make_env() accepts selector kwargs only. Use PlumeEnv(...) for direct component injection.",
+            parameter_name="kwargs",
+            parameter_value=forbidden_keys,
+        )
 
-def _normalize_component_make_env_kwargs(kwargs: Mapping[str, object]) -> dict[str, Any]:
-    component_kwargs: dict[str, Any] = dict(kwargs)
-    source_location = component_kwargs.pop("source_location", None)
-    if source_location is not None and "goal_location" not in component_kwargs:
-        component_kwargs["goal_location"] = source_location
-    plume_params = component_kwargs.pop("plume_params", None)
-    if plume_params is not None and "plume_sigma" not in component_kwargs:
-        if isinstance(plume_params, Mapping):
-            sigma_value = plume_params.get("sigma")
-            if sigma_value is not None:
-                component_kwargs["plume_sigma"] = float(sigma_value)
-    plume_value = component_kwargs.get("plume")
+    source_location = selector_kwargs.pop("source_location", None)
+    if source_location is not None and "goal_location" not in selector_kwargs:
+        selector_kwargs["goal_location"] = source_location
+
+    plume_params = selector_kwargs.pop("plume_params", None)
+    if plume_params is not None:
+        if not isinstance(plume_params, Mapping):
+            raise ValidationError(
+                "plume_params must be mapping-like",
+                parameter_name="plume_params",
+                parameter_value=plume_params,
+            )
+        if "plume_sigma" not in selector_kwargs and "sigma" in plume_params:
+            selector_kwargs["plume_sigma"] = float(plume_params["sigma"])
+
     if isinstance(plume_value, str):
         normalized_plume = plume_value.strip().lower()
         if normalized_plume not in {"static", "movie"}:
             raise ValidationError(
-                "plume string must be 'static' or 'movie'",
+                "plume must be 'static' or 'movie'",
                 parameter_name="plume",
                 parameter_value=plume_value,
                 expected_format="static|movie",
             )
-        component_kwargs["plume"] = normalized_plume
-    return component_kwargs
+        selector_kwargs["plume"] = normalized_plume
 
-
-def _normalize_stable_make_env_kwargs(kwargs: Mapping[str, object]) -> dict[str, Any]:
-    stable_kwargs: dict[str, Any] = dict(kwargs)
-    plume_value = stable_kwargs.get("plume")
-    stable_video_keys = {key for key in stable_kwargs if key.startswith("video_")}
-
-    if "plume_type" in stable_kwargs and isinstance(plume_value, str):
-        raise ValidationError(
-            "plume and plume_type must not both be provided as string selectors",
-            parameter_name="plume",
-            parameter_value=plume_value,
-        )
-
-    if not isinstance(plume_value, str):
-        return stable_kwargs
-
-    normalized_plume = plume_value.strip().lower()
-    stable_kwargs.pop("plume", None)
-
-    if normalized_plume == "static":
-        if stable_video_keys:
-            raise ValidationError(
-                "video_* kwargs require plume='movie' or plume_type='video'",
-                parameter_name="plume",
-                parameter_value=plume_value,
-                expected_format="movie|video",
-            )
-        stable_kwargs.setdefault("plume_type", "gaussian")
-        return stable_kwargs
-
-    if normalized_plume == "movie":
-        warnings.warn(
-            "make_env(plume='movie') is deprecated; use plume_type='video' instead.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        stable_kwargs["plume_type"] = "video"
-        return stable_kwargs
-
-    raise ValidationError(
-        "plume string must be 'static' or 'movie'",
-        parameter_name="plume",
-        parameter_value=plume_value,
-        expected_format="static|movie|ConcentrationField",
-    )
+    return selector_kwargs
 
 
 def make_env(**kwargs):
-    route = _classify_make_env_kwargs(kwargs)
-    if route == "component":
-        if create_component_environment is None:
-            raise RuntimeError(
-                "Component environment factory not available to handle compatibility kwargs."
-            )
-        component_kwargs = _normalize_component_make_env_kwargs(kwargs)
-
-        warnings.warn(
-            "make_env received compatibility kwargs; routing to component environment factory.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return create_component_environment(**component_kwargs)
-
     if create_plume_env is None:
         raise RuntimeError(
             "PlumeEnv not available. Ensure gymnasium and dependencies are installed."
         )
-    return create_plume_env(**_normalize_stable_make_env_kwargs(kwargs))
+    return create_plume_env(**_normalize_make_env_kwargs(kwargs))
 
 
 def get_conf_dir():
@@ -375,7 +285,6 @@ __all__ = [
     # Environments
     "PlumeEnv",
     "create_plume_env",
-    "create_component_environment",
     "initialize_package",
     "get_package_info",
     "get_conf_dir",

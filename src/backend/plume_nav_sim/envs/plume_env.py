@@ -23,11 +23,10 @@ from ..constants import (
     SOURCE_MARKER_SIZE,
 )
 from ..core.types import AgentState, Coordinates, GridSize
-from ..interfaces import ActionProcessor, ObservationModel, RewardFunction
+from ..interfaces import ActionProcessor, ObservationModel, RewardFunction, VectorField
 from ..observations import ConcentrationSensor
 from ..plume.gaussian import GaussianPlume
 from ..plume.protocol import ConcentrationField
-from ..plume.video import VideoConfig, VideoPlume
 from ..rewards import SparseGoalReward
 from .state import EnvironmentState
 
@@ -76,6 +75,7 @@ class PlumeEnv(gym.Env):
         plume_params: Optional[Mapping[str, Any]] = None,
         start_location: Optional[tuple[int, int] | Coordinates] = None,
         render_mode: Optional[str] = None,
+        wind_field: Optional[VectorField] = None,
     ) -> None:
         super().__init__()
 
@@ -176,6 +176,7 @@ class PlumeEnv(gym.Env):
         self._grid_size = grid
         self.grid_size = grid.to_tuple()
         self._goal_location = goal
+        self.goal_location = goal
         self.source_location = goal.to_tuple()
         self.goal_radius = radius
         self.max_steps = steps
@@ -186,6 +187,7 @@ class PlumeEnv(gym.Env):
             if start_location is None
             else _to_coordinates(start_location, "start_location")
         )
+        self.start_location = self._start_location
 
         if plume is None:
             sigma = DEFAULT_PLUME_SIGMA
@@ -210,6 +212,9 @@ class PlumeEnv(gym.Env):
                 sigma=sigma_value,
             )
         self.plume = plume
+        self.concentration_field = plume
+        self._concentration_field = plume
+        self.plume_params = dict(plume_params) if plume_params is not None else None
 
         if action_model is None:
             action_model = DiscreteGridActions()
@@ -221,6 +226,14 @@ class PlumeEnv(gym.Env):
         self.action_model = action_model
         self.sensor_model = sensor_model
         self.reward_fn = reward_fn
+        self.action_processor = action_model
+        self.observation_model = sensor_model
+        self.reward_function = reward_fn
+        self._action_processor = action_model
+        self._observation_model = sensor_model
+        self._reward_function = reward_fn
+        self._wind_field = wind_field
+        self.wind_field = wind_field
 
         self.action_space = action_model.action_space
         self.observation_space = sensor_model.observation_space
@@ -229,7 +242,9 @@ class PlumeEnv(gym.Env):
         self._step_count = 0
         self._episode_count = 0
         self._latest_seed: Optional[int] = None
+        self._seed: Optional[int] = None
         self.np_random: Optional[np.random.Generator] = None
+        self._rng: Optional[np.random.Generator] = None
 
         self._state = EnvironmentState.CREATED
 
@@ -267,35 +282,34 @@ class PlumeEnv(gym.Env):
         seed_to_use: Optional[int]
         if validated_seed is not None:
             self.np_random, seed_to_use = gym_seeding.np_random(validated_seed)
+            self._latest_seed = None if seed_to_use is None else int(seed_to_use)
         else:
             if self.np_random is None:
-                self.np_random, seed_to_use = gym_seeding.np_random(None)
-            else:
-                seed_to_use = int(
-                    self.np_random.integers(0, 2**32 - 1, dtype=np.uint32)
-                )
-
-        self._latest_seed = None if seed_to_use is None else int(seed_to_use)
+                self.np_random, _ = gym_seeding.np_random(None)
+            # Unseeded episodes remain stochastic, but do not advertise a replay seed.
+            self._latest_seed = None
+        self._seed = self._latest_seed
+        self._rng = self.np_random
         self._step_count = 0
         self._episode_count += 1
 
         start_position = self._choose_start_position()
         self._agent_state = AgentState(position=start_position, orientation=0.0)
+        self.start_location = start_position
 
         self._state = EnvironmentState.READY
 
         if hasattr(self.action_model, "set_rng"):
             try:
-                self.action_model.set_rng(self.np_random)
+                self.action_model.set_rng(self._rng)
             except Exception:
                 pass
 
-        self._reset_plume_state()
+        self._reset_dynamic_fields()
 
         observation = self._get_observation()
         pos = self._agent_state.position
         info = {
-            "seed": self._latest_seed,
             "agent_position": (pos.x, pos.y),
             "agent_xy": (pos.x, pos.y),
             "goal_location": self.source_location,
@@ -305,6 +319,8 @@ class PlumeEnv(gym.Env):
             "total_reward": self._agent_state.total_reward,
             "goal_reached": False,
         }
+        if self._latest_seed is not None:
+            info["seed"] = self._latest_seed
         return observation, info
 
     def step(self, action: Any) -> tuple[Any, float, bool, bool, dict]:
@@ -332,7 +348,7 @@ class PlumeEnv(gym.Env):
         self._step_count += 1
         new_state.step_count = self._step_count
 
-        self._advance_plume(self._step_count)
+        self._advance_dynamic_fields(self._step_count)
 
         reward = float(
             self.reward_fn.compute_reward(
@@ -396,6 +412,8 @@ class PlumeEnv(gym.Env):
         if seed_used is not None:
             seed_used = int(seed_used)
         self._latest_seed = seed_used
+        self._seed = seed_used
+        self._rng = self.np_random
         return [seed_used]
 
     def _ensure_ready_for_step(self) -> None:
@@ -409,12 +427,12 @@ class PlumeEnv(gym.Env):
     def _choose_start_position(self) -> Coordinates:
         if self._start_location is not None:
             return self._start_location
-        rng = self.np_random or np.random.default_rng()
+        rng = self._rng or self.np_random or np.random.default_rng()
         x = int(rng.integers(0, self._grid_size.width))
         y = int(rng.integers(0, self._grid_size.height))
         return Coordinates(x=x, y=y)
 
-    def _reset_plume_state(self) -> None:
+    def _reset_dynamic_fields(self) -> None:
         reset = getattr(self.plume, "reset", None)
         if callable(reset):
             reset(self._latest_seed)
@@ -422,11 +440,19 @@ class PlumeEnv(gym.Env):
             on_reset = getattr(self.plume, "on_reset", None)
             if callable(on_reset):
                 on_reset()
+        if self._wind_field is not None:
+            wind_reset = getattr(self._wind_field, "reset", None)
+            if callable(wind_reset):
+                wind_reset(self._latest_seed)
 
-    def _advance_plume(self, step_count: int) -> None:
+    def _advance_dynamic_fields(self, step_count: int) -> None:
         advance = getattr(self.plume, "advance_to_step", None)
         if callable(advance):
             advance(step_count)
+        if self._wind_field is not None:
+            wind_advance = getattr(self._wind_field, "advance_to_step", None)
+            if callable(wind_advance):
+                wind_advance(step_count)
 
     def _get_plume_field(self) -> np.ndarray:
         field = getattr(self.plume, "field_array", None)
@@ -443,19 +469,23 @@ class PlumeEnv(gym.Env):
                 field[y, x] = float(self.plume.sample(x, y, self._step_count))
         return field
 
-    def _get_observation(self) -> Any:
-        env_state = {
-            "agent_state": self._agent_state,
+    def _build_env_state_dict(
+        self, agent_state: Optional[AgentState] = None
+    ) -> dict[str, Any]:
+        return {
+            "agent_state": agent_state or self._agent_state,
             "plume_field": self._get_plume_field(),
             "concentration_field": self.plume,
-            "grid_size": self._grid_size,
-            "source_location": self._goal_location,
+            "wind_field": self._wind_field,
             "goal_location": self._goal_location,
+            "grid_size": self._grid_size,
             "step_count": self._step_count,
             "max_steps": self.max_steps,
-            "rng": self.np_random,
+            "rng": self._rng,
         }
-        return self.sensor_model.get_observation(env_state)
+
+    def _get_observation(self) -> Any:
+        return self.sensor_model.get_observation(self._build_env_state_dict())
 
     def _render_rgb_array(self) -> np.ndarray:
         height = self._grid_size.height
@@ -515,92 +545,56 @@ class PlumeEnv(gym.Env):
         canvas[y0:y1, x0:x1] = np.array(color, dtype=np.uint8)
 
 
-def create_plume_env(plume_type: str = "gaussian", **kwargs: Any) -> PlumeEnv:
-    """Create a PlumeEnv with a Gaussian or video plume backend."""
+def create_plume_env(**kwargs: Any) -> PlumeEnv:
+    """Create a PlumeEnv via direct kwargs or the canonical selector surface."""
 
-    if plume_type is None:
-        plume_kind = "gaussian"
-    elif isinstance(plume_type, str):
-        plume_kind = plume_type.lower()
-    else:
+    if "plume_type" in kwargs:
         raise ValidationError(
-            "plume_type must be a string",
+            "plume_type is no longer supported. Use plume='static' or plume='movie'.",
             parameter_name="plume_type",
-            parameter_value=plume_type,
+            parameter_value=kwargs.get("plume_type"),
         )
 
-    if plume_kind == "gaussian":
+    removed_video_keys = sorted(key for key in kwargs if key.startswith("video_"))
+    if removed_video_keys:
+        alias = removed_video_keys[0]
+        raise ValidationError(
+            f"{alias} is no longer supported. Use the matching movie_* selector kwarg.",
+            parameter_name=alias,
+            parameter_value=kwargs.get(alias),
+        )
+
+    selector_keys = {
+        "goal_location",
+        "action_type",
+        "observation_type",
+        "reward_type",
+        "plume_sigma",
+        "step_size",
+        "enable_wind",
+        "wind_direction_deg",
+        "wind_speed",
+        "wind_vector",
+        "wind_noise_std",
+    }
+    uses_selector_route = any(key in kwargs for key in selector_keys) or any(
+        key.startswith("movie_") for key in kwargs
+    ) or isinstance(kwargs.get("plume"), str)
+
+    if not uses_selector_route:
         return PlumeEnv(**kwargs)
 
-    if plume_kind != "video":
-        raise ValidationError(
-            "plume_type must be 'gaussian' or 'video'",
-            parameter_name="plume_type",
-            parameter_value=plume_type,
-            expected_format="gaussian|video",
-        )
+    selector_kwargs = dict(kwargs)
+    source_location = selector_kwargs.pop("source_location", None)
+    if source_location is not None and "goal_location" not in selector_kwargs:
+        selector_kwargs["goal_location"] = source_location
 
-    if "plume" in kwargs:
-        raise ValidationError(
-            "plume must not be provided when plume_type='video'",
-            parameter_name="plume",
-            parameter_value=kwargs.get("plume"),
-        )
+    plume_params = selector_kwargs.pop("plume_params", None)
+    if plume_params is not None and "plume_sigma" not in selector_kwargs:
+        sigma = plume_params.get("sigma") if isinstance(plume_params, dict) else None
+        if sigma is not None:
+            selector_kwargs["plume_sigma"] = float(sigma)
 
-    video_step_policy_provided = "video_step_policy" in kwargs
-    video_path = kwargs.pop("video_path", None)
-    video_data = kwargs.pop("video_data", None)
-    video_fps = kwargs.pop("video_fps", None)
-    video_pixel_to_grid = kwargs.pop("video_pixel_to_grid", None)
-    video_origin = kwargs.pop("video_origin", None)
-    video_extent = kwargs.pop("video_extent", None)
-    video_step_policy = kwargs.pop("video_step_policy", "wrap")
+    from .factory import _create_plume_env_from_selectors
 
-    video_config = kwargs.pop("video_config", None)
-    if video_config is not None and not isinstance(video_config, VideoConfig):
-        raise ValidationError(
-            "video_config must be a VideoConfig instance",
-            parameter_name="video_config",
-            parameter_value=type(video_config).__name__,
-        )
-
-    if video_config is not None:
-        extra_video = any(
-            value is not None
-            for value in (
-                video_path,
-                video_data,
-                video_fps,
-                video_pixel_to_grid,
-                video_origin,
-                video_extent,
-            )
-        )
-        if extra_video or video_step_policy_provided:
-            raise ValidationError(
-                "video_config is mutually exclusive with video_* overrides",
-                parameter_name="video_config",
-                parameter_value=type(video_config).__name__,
-            )
-    else:
-        if video_path is None and video_data is None:
-            raise ValidationError(
-                "video plume requires video_path or video_data",
-                parameter_name="video_path",
-                parameter_value=video_path,
-            )
-
-        resolved_path = "" if video_path is None else str(video_path)
-        video_config = VideoConfig(
-            path=resolved_path,
-            fps=video_fps,
-            pixel_to_grid=video_pixel_to_grid,
-            origin=video_origin,
-            extent=video_extent,
-            step_policy=video_step_policy,
-            data_array=video_data,
-        )
-
-    plume = VideoPlume(video_config)
-    kwargs["plume"] = plume
-    return PlumeEnv(**kwargs)
+    return _create_plume_env_from_selectors(**selector_kwargs)

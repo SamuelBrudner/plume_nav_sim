@@ -62,18 +62,17 @@ result = r.run_episode(
 
 ## Extend It
 
-The fastest way to add your own navigation behavior is to build custom components and inject them into `ComponentBasedEnvironment`. Use `EXTENDING.md` as the researcher entry point: it shows minimal interfaces, implementation templates, and a full custom-components example.
+The fastest way to add your own navigation behavior is to build custom components and inject them into `PlumeEnv`. Use `EXTENDING.md` as the researcher entry point: it shows minimal interfaces, implementation templates, and a full custom-components example.
 
 Read: [`EXTENDING.md`](./EXTENDING.md)
 
 ## Architecture Overview
 
-`plume-nav-sim` supports two main usage modes:
+`plume-nav-sim` centers on one runtime environment:
 
-- `PlumeEnv`: standard, ready-to-run Gymnasium environment
-- `ComponentBasedEnvironment`: dependency-injected environment for custom research logic
+- `PlumeEnv`: standard Gymnasium environment that also supports direct component injection for custom research logic
 
-`ComponentBasedEnvironment` centers on three swappable components:
+`PlumeEnv` can delegate to three swappable components:
 
 - `ActionProcessor`: maps policy actions to next agent state
 - `ObservationModel`: maps environment state to observations
@@ -96,7 +95,7 @@ pip install -e ".[media]"      # video/movie plume support
 pip install -e ".[data]"       # data capture and analysis
 
 # Once published:
-# pip install plume-nav-sim[media]
+# pip install "plume-nav-sim[media]"
 ```
 
 Editable install for local development:
@@ -105,7 +104,7 @@ Editable install for local development:
 git clone https://github.com/SamuelBrudner/plume_nav_sim.git
 cd plume_nav_sim/src/backend
 python -m venv .venv && source .venv/bin/activate
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 Verify install:
@@ -113,6 +112,15 @@ Verify install:
 ```bash
 python -c "import plume_nav_sim; print(plume_nav_sim.PACKAGE_VERSION)"
 ```
+
+## Construction Surfaces
+
+Use one of these supported entry points:
+
+- `plume_nav_sim.make_env(...)` for selector-based setup with `plume="static"|"movie"` and `movie_*` kwargs
+- `plume_nav_sim.EnvironmentConfig` and `create_environment_config(...)` when you want a lightweight env-init config object
+- `plume_nav_sim.config.SimulationSpec`, `create_simulation_spec(...)`, and `prepare(...)` when the full runtime should live in one serializable spec
+- `PlumeEnv(...)` when you want to inject custom action, observation, reward, or plume objects directly
 
 ## Contributing / License
 

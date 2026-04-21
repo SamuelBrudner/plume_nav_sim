@@ -19,7 +19,7 @@ plume = load_plume("colorado_jet_v1", auto_download=True)
 **Install requirements:**
 
 - Registry browsing, CLI, and download: `pip install plume-nav-sim`
-- Loading datasets (xarray, zarr, dask): `pip install plume-nav-sim[media]`
+- Loading datasets (xarray, zarr, dask): `pip install "plume-nav-sim[media]"`
 
 If `auto_download=True` is not set and the dataset is not already cached,
 `load_plume` raises an error.
@@ -210,7 +210,7 @@ Steps for contributors:
 ## Requirements
 
 - **Core** (`pip install plume-nav-sim`): registry browsing, CLI, download.
-- **Loading** (`pip install plume-nav-sim[media]`): adds xarray, zarr, and dask
+- **Loading** (`pip install "plume-nav-sim[media]"`): adds xarray, zarr, and dask
   for dataset loading.
 
 All datasets are converted to a standardized Zarr store on ingest, with a

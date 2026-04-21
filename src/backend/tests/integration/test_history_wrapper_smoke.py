@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from plume_nav_sim.envs import create_component_environment
+from plume_nav_sim import make_env
 from plume_nav_sim.observations.history_wrappers import ConcentrationNBackWrapper
 
 
 def test_concentration_nback_wrapper_smoke_with_real_env():
     # Build a real env with default concentration observations
-    env = create_component_environment(
+    env = make_env(
         grid_size=(32, 32),
         max_steps=20,
         action_type="run_tumble",

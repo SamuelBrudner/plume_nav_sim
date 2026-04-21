@@ -1,12 +1,12 @@
 """Customize built-in components with string options."""
 
-from plume_nav_sim.envs import create_component_environment
+import plume_nav_sim as pns
 
 
 def main() -> None:
     """Showcase built-in configuration knobs."""
 
-    env = create_component_environment(
+    env = pns.make_env(
         grid_size=(64, 64),
         goal_location=(16, 16),
         max_steps=500,

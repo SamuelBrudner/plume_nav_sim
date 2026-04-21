@@ -17,8 +17,10 @@ From repository root:
 
 ```bash
 cd src/backend
-python scripts/setup_dev_env.py --verbose
-source plume-nav-env/bin/activate
+python -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e ".[dev]"
 pre-commit run --all-files
 pytest -q
 ```
@@ -35,17 +37,7 @@ Windows is accepted on a best-effort basis.
 
 ## Development Environment
 
-### Recommended Setup Script
-
-```bash
-cd src/backend
-python scripts/setup_dev_env.py --verbose
-source plume-nav-env/bin/activate
-```
-
-The setup script installs development dependencies and prepares local tooling.
-
-### Manual Setup
+### Recommended Setup
 
 ```bash
 cd src/backend
@@ -60,7 +52,8 @@ pre-commit install --install-hooks
 
 ```bash
 cd src/backend
-python -c "import gymnasium as gym; import plume_nav_sim; env = gym.make('PlumeNav-StaticGaussian-v0'); obs, info = env.reset(seed=0); print(type(obs), type(info))"
+python -c "import gymnasium as gym; from plume_nav_sim.registration import ENV_ID, ensure_registered; ensure_registered(); env = gym.make(ENV_ID); obs, info = env.reset(seed=0); print(ENV_ID, type(obs), type(info)); env.close()"
+python -c "import plume_nav_sim as pns; env = pns.make_env(); obs, info = env.reset(seed=0); print(type(obs), type(info)); env.close()"
 pytest -q
 ```
 

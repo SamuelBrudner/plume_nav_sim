@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from typing import Any, Optional
 
 import gymnasium as gym
@@ -14,11 +13,9 @@ from ..constants import (
     DEFAULT_MAX_STEPS,
     DEFAULT_SOURCE_LOCATION,
 )
-from .component_env import ComponentBasedEnvironment
-from .factory import create_component_environment
 from .plume_env import PlumeEnv, create_plume_env
 
-SUPPORTED_ENVIRONMENTS = ("plume_env", "plume", "PlumeEnv", "component")
+SUPPORTED_ENVIRONMENTS = ("plume_env", "plume", "PlumeEnv")
 
 
 def create_environment(
@@ -67,25 +64,7 @@ def create_environment(
 
     effective_render_mode = "rgb_array" if render_mode is None else render_mode
 
-    if effective_env_type == "component":
-        warnings.warn(
-            "env_type 'component' is deprecated; use 'plume_env' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        component_kwargs = dict(env_options or {})
-        component_kwargs.pop("plume_type", None)
-        component_kwargs.update(
-            grid_size=effective_grid,
-            goal_location=effective_source,
-            max_steps=effective_max_steps,
-            goal_radius=effective_goal_radius,
-            render_mode=effective_render_mode,
-        )
-        return create_component_environment(**component_kwargs)
-
     plume_env_kwargs = dict(env_options or {})
-    plume_type = plume_env_kwargs.pop("plume_type", "gaussian")
     plume_env_kwargs.update(
         grid_size=effective_grid,
         source_location=effective_source,
@@ -93,13 +72,11 @@ def create_environment(
         goal_radius=effective_goal_radius,
         render_mode=effective_render_mode,
     )
-    return create_plume_env(plume_type=plume_type, **plume_env_kwargs)
+    return create_plume_env(**plume_env_kwargs)
 
 
 __all__ = [
     "PlumeEnv",
-    "ComponentBasedEnvironment",
     "create_plume_env",
-    "create_component_environment",
     "create_environment",
 ]

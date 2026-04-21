@@ -14,7 +14,11 @@ Primary package entry points:
 Environment factories:
 
 - `plume_nav_sim.envs.plume_env.create_plume_env`
-- `plume_nav_sim.envs.factory.create_component_environment`
+- `plume_nav_sim.config.composition.build_env`
+- `plume_nav_sim.EnvironmentConfig`
+- `plume_nav_sim.config.create_environment_config`
+- `plume_nav_sim.config.create_simulation_spec`
+- `plume_nav_sim.config.prepare`
 
 Registration helpers:
 
@@ -42,7 +46,7 @@ Current expectations:
 - Explicit out-of-bounds user coordinates are rejected rather than clamped or recentered.
 - Reusing the same seed should produce deterministic behavior for equivalent configuration and policy inputs.
 
-`create_component_environment()` remains supported for the component-based and compatibility surface. It accepts the currently documented `action_type`, `observation_type`, `reward_type`, and movie-plume configuration options. Deprecated compatibility routing still exists through `make_env(...)` for legacy kwargs, but the preferred stable surface is explicit factory usage. The default and compatibility-routed envs share the same common public info keys (`step_count`, `episode_count`, `total_reward`, `goal_reached`, `agent_xy`, `goal_location`, `source_location`).
+`make_env(...)`, `EnvironmentConfig`, and `SimulationSpec` now converge on the same selector-driven `PlumeEnv` construction path. Direct `PlumeEnv(...)` remains available for explicit component injection. The direct and selector-routed surfaces share the same common public info keys (`step_count`, `episode_count`, `total_reward`, `goal_reached`, `agent_xy`, `goal_location`, `source_location`).
 
 ## Error Contract
 

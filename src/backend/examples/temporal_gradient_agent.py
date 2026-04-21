@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from plume_nav_sim.envs import create_component_environment
+import plume_nav_sim as pns
 
 # Oriented action ids from OrientedGridActions
 FORWARD, TURN_LEFT, TURN_RIGHT = 0, 1, 2
@@ -80,7 +80,7 @@ def run_episode(
     render_mode: str | None = None,
 ) -> float:
     """Run a single episode and return total reward."""
-    env = create_component_environment(
+    env = pns.make_env(
         grid_size=grid_size,
         goal_radius=goal_radius,
         plume_sigma=plume_sigma,

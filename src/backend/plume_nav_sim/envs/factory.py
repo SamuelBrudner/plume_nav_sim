@@ -22,11 +22,11 @@ from ..plume.gaussian import GaussianPlume
 from ..plume.video import VideoConfig, VideoPlume, resolve_movie_dataset_path
 from ..rewards import SparseGoalReward, StepPenaltyReward
 from ..wind_field import ConstantWindField
-from .component_env import ComponentBasedEnvironment
+from .plume_env import PlumeEnv
 
 LOG = logging.getLogger(__name__)
 
-__all__ = ["create_component_environment"]
+__all__: list[str] = []
 
 
 def _coerce_source_location_px(value: object) -> tuple[int, int] | None:
@@ -41,7 +41,7 @@ def _coerce_source_location_px(value: object) -> tuple[int, int] | None:
 def _source_location_px_from_dataset_dir(dataset_path: Path) -> tuple[int, int] | None:
     try:
         import zarr
-    except Exception:
+    except ImportError:
         return None
     try:
         root = zarr.open_group(str(dataset_path), mode="r")
@@ -79,7 +79,7 @@ def _source_location_px_from_dataset_dir(dataset_path: Path) -> tuple[int, int] 
     return None
 
 
-def create_component_environment(  # noqa: C901
+def _create_plume_env_from_selectors(  # noqa: C901
     *,
     grid_size: Union[tuple[int, int], GridSize] = (128, 128),
     goal_location: Optional[Union[tuple[int, int], Coordinates]] = None,
@@ -94,7 +94,6 @@ def create_component_environment(  # noqa: C901
     plume_sigma: float = 20.0,
     step_size: int = 1,
     render_mode: Optional[str] = None,
-    warn_deprecated: bool = False,
     # New: select plume source and optional movie configuration
     plume: Literal["static", "movie"] = "static",
     movie_path: Optional[str] = None,
@@ -115,7 +114,7 @@ def create_component_environment(  # noqa: C901
     wind_speed: float = 1.0,
     wind_vector: Optional[tuple[float, float]] = None,
     wind_noise_std: float = 0.0,
-) -> ComponentBasedEnvironment:
+) -> PlumeEnv:
     # Convert tuples to proper types
     grid_size = validate_grid_size(grid_size)
     goal_location_was_implicit = goal_location is None
@@ -142,55 +141,37 @@ def create_component_environment(  # noqa: C901
             y=min(max(goal_location.y, 0), grid_size.height - 1),
         )
 
-    # Create action processor
-    if action_type == "discrete":
-        action_processor = DiscreteGridActions(step_size=step_size)
-    elif action_type == "oriented":
-        action_processor = OrientedGridActions(step_size=step_size)
-    elif action_type == "run_tumble":
-        action_processor = OrientedRunTumbleActions(step_size=step_size)
-    else:
-        raise ValueError(
-            f"Invalid action_type: {action_type}. Must be 'discrete', 'oriented', or 'run_tumble'."
-        )
-
-    # Create observation model
-    if observation_type == "concentration":
-        observation_model = ConcentrationSensor()
-    elif observation_type == "antennae":
-        observation_model = AntennaeArraySensor(n_sensors=2, sensor_distance=2.0)
-    elif observation_type == "wind_vector":
-        observation_model = WindVectorSensor(noise_std=wind_noise_std)
-    else:
-        raise ValueError(
-            f"Invalid observation_type: {observation_type}. "
-            f"Must be 'concentration', 'antennae', or 'wind_vector'."
-        )
+    action_model = _create_action_model(action_type, step_size)
+    observation_model = _create_observation_model(
+        observation_type, wind_noise_std=wind_noise_std
+    )
 
     # Create plume/concentration field
     if plume == "movie":
-        if not movie_path and not movie_dataset_id:
+        if movie_data is None and not movie_path and not movie_dataset_id:
             raise ValueError(
                 "env.plume=movie requires movie.path or movie.dataset_id to be provided"
             )
 
         cache_root = Path(movie_cache_root) if movie_cache_root else DEFAULT_CACHE_ROOT
-        dataset_path = _resolve_movie_dataset(
-            movie_path=movie_path,
-            movie_dataset_id=movie_dataset_id,
-            movie_auto_download=movie_auto_download,
-            movie_cache_root=cache_root,
-            movie_fps=movie_fps,
-            movie_pixel_to_grid=movie_pixel_to_grid,
-            movie_origin=movie_origin,
-            movie_extent=movie_extent,
-            movie_h5_dataset=movie_h5_dataset,
-        )
+        dataset_path: Path | None = None
+        if movie_path or movie_dataset_id:
+            dataset_path = _resolve_movie_dataset(
+                movie_path=movie_path,
+                movie_dataset_id=movie_dataset_id,
+                movie_auto_download=movie_auto_download,
+                movie_cache_root=cache_root,
+                movie_fps=movie_fps,
+                movie_pixel_to_grid=movie_pixel_to_grid,
+                movie_origin=movie_origin,
+                movie_extent=movie_extent,
+                movie_h5_dataset=movie_h5_dataset,
+            )
 
         if goal_location_is_default:
             resolved: tuple[int, int] | None = None
-            if resolved is None and Path(dataset_path).is_dir():
-                resolved = _source_location_px_from_dataset_dir(Path(dataset_path))
+            if resolved is None and dataset_path is not None and dataset_path.is_dir():
+                resolved = _source_location_px_from_dataset_dir(dataset_path)
             if resolved is not None:
                 goal_location = Coordinates(x=resolved[0], y=resolved[1])
 
@@ -220,8 +201,8 @@ def create_component_environment(  # noqa: C901
         # ingestion has produced a dataset, rely on its attrs instead of
         # overriding via VideoConfig. For existing dataset directories, preserve
         # the prior behavior and allow explicit overrides.
-        source_root = Path(movie_path) if movie_path else Path(dataset_path)
-        source_is_dir = source_root.is_dir()
+        source_root = Path(movie_path) if movie_path else dataset_path
+        source_is_dir = source_root.is_dir() if source_root is not None else False
         if source_is_dir:
             cfg_fps = movie_fps
             cfg_pixel_to_grid = movie_pixel_to_grid
@@ -234,7 +215,7 @@ def create_component_environment(  # noqa: C901
             cfg_extent = None
 
         movie_cfg = VideoConfig(
-            path=str(dataset_path),
+            path="" if dataset_path is None else str(dataset_path),
             fps=cfg_fps,
             pixel_to_grid=cfg_pixel_to_grid,
             origin=cfg_origin,
@@ -247,26 +228,15 @@ def create_component_environment(  # noqa: C901
 
         # Override grid_size based on dataset to avoid mismatches
         grid_size = movie_field.grid_size
+        if goal_location_is_default and not grid_size.contains(goal_location):
+            goal_location = grid_size.center()
     else:
         concentration_field = _create_gaussian_plume_field(
             grid_size, goal_location, plume_sigma
         )
-    # Create reward function (after movie goal override)
-    if reward_type == "sparse":
-        reward_function = SparseGoalReward(
-            goal_position=goal_location, goal_radius=goal_radius
-        )
-    elif reward_type == "step_penalty":
-        reward_function = StepPenaltyReward(
-            goal_position=goal_location,
-            goal_radius=goal_radius,
-            goal_reward=1.0,
-            step_penalty=0.01,
-        )
-    else:
-        raise ValueError(
-            f"Invalid reward_type: {reward_type}. Must be 'sparse' or 'step_penalty'."
-        )
+    reward_function = _create_reward_function(
+        reward_type, goal_location, goal_radius=goal_radius
+    )
 
     wind_field = None
     if enable_wind or observation_type == "wind_vector":
@@ -276,28 +246,71 @@ def create_component_environment(  # noqa: C901
             vector=wind_vector,
         )
 
-    # Assemble environment
-    return ComponentBasedEnvironment(
-        action_processor=action_processor,
-        observation_model=observation_model,
-        reward_function=reward_function,
-        concentration_field=concentration_field,
-        wind_field=wind_field,
-        grid_size=grid_size,
-        max_steps=max_steps,
-        goal_location=goal_location,
-        goal_radius=goal_radius,
+    plume_params = None
+    if plume != "movie":
+        plume_params = {"sigma": float(plume_sigma)}
+
+    return PlumeEnv(
+        grid_size=grid_size.to_tuple(),
+        source_location=goal_location,
         start_location=start_location,
+        max_steps=max_steps,
+        goal_radius=goal_radius,
+        plume=concentration_field,
+        sensor_model=observation_model,
+        action_model=action_model,
+        reward_fn=reward_function,
+        plume_params=plume_params,
         render_mode=render_mode,
-        _warn_deprecated=warn_deprecated,
+        wind_field=wind_field,
     )
-
-
 def _create_gaussian_plume_field(
     grid_size: GridSize, goal_location: Coordinates, plume_sigma: float
 ) -> GaussianPlume:
     return GaussianPlume(
         grid_size=grid_size, source_location=goal_location, sigma=plume_sigma
+    )
+
+
+def _create_action_model(action_type: str, step_size: int):
+    if action_type == "discrete":
+        return DiscreteGridActions(step_size=step_size)
+    if action_type == "oriented":
+        return OrientedGridActions(step_size=step_size)
+    if action_type == "run_tumble":
+        return OrientedRunTumbleActions(step_size=step_size)
+    raise ValueError(
+        f"Invalid action_type: {action_type}. Must be 'discrete', 'oriented', or 'run_tumble'."
+    )
+
+
+def _create_observation_model(observation_type: str, *, wind_noise_std: float):
+    if observation_type == "concentration":
+        return ConcentrationSensor()
+    if observation_type == "antennae":
+        return AntennaeArraySensor(n_sensors=2, sensor_distance=2.0)
+    if observation_type == "wind_vector":
+        return WindVectorSensor(noise_std=wind_noise_std)
+    raise ValueError(
+        f"Invalid observation_type: {observation_type}. "
+        f"Must be 'concentration', 'antennae', or 'wind_vector'."
+    )
+
+
+def _create_reward_function(
+    reward_type: str, goal_location: Coordinates, *, goal_radius: float
+):
+    if reward_type == "sparse":
+        return SparseGoalReward(goal_position=goal_location, goal_radius=goal_radius)
+    if reward_type == "step_penalty":
+        return StepPenaltyReward(
+            goal_position=goal_location,
+            goal_radius=goal_radius,
+            goal_reward=1.0,
+            step_penalty=0.01,
+        )
+    raise ValueError(
+        f"Invalid reward_type: {reward_type}. Must be 'sparse' or 'step_penalty'."
     )
 
 
