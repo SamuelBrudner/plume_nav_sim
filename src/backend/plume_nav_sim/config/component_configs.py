@@ -1,7 +1,10 @@
 import warnings
-from typing import Any, Dict, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+if TYPE_CHECKING:
+    from .composition import SimulationSpec
 
 __all__ = [
     "ActionConfig",
@@ -212,6 +215,35 @@ class ComponentEnvironmentConfig(BaseModel):
             }
         },
     )
+
+    def to_simulation_spec(self) -> "SimulationSpec":
+        from .composition import SimulationSpec
+
+        payload: dict[str, Any] = {
+            "grid_size": tuple(self.grid_size),
+            "source_location": tuple(self.goal_location),
+            "max_steps": self.max_steps,
+            "goal_radius": self.reward.goal_radius,
+            "action_type": self.action.type,
+            "step_size": self.action.step_size,
+            "observation_type": self.observation.type,
+            "reward_type": self.reward.type,
+            "plume_sigma": self.plume.sigma,
+            "render": self.render_mode is not None,
+        }
+        if self.start_location is not None:
+            payload["start_location"] = tuple(self.start_location)
+        if self.render_mode is not None:
+            payload["render_mode"] = self.render_mode
+        if self.observation.type == "wind_vector":
+            payload["wind_noise_std"] = float(self.observation.noise_std)
+        if self.wind is not None:
+            payload["enable_wind"] = True
+            payload["wind_direction_deg"] = self.wind.direction_deg
+            payload["wind_speed"] = self.wind.speed
+            if self.wind.vector is not None:
+                payload["wind_vector"] = tuple(self.wind.vector)
+        return SimulationSpec.model_validate(payload)
 
 
 class EnvironmentConfig(ComponentEnvironmentConfig):

@@ -17,6 +17,7 @@ from .composition import (
     SimulationSpec,
     build_env,
     build_policy,
+    create_simulation_spec,
     load_policy,
     prepare,
     reset_policy_if_possible,
@@ -27,14 +28,10 @@ from .defaults import (
     get_default_environment_config,
 )
 from .factories import (
+    component_environment_config_to_spec,
     component_environment_config_to_kwargs,
-    create_action_processor,
-    create_concentration_field,
     create_component_environment_from_config,
     create_environment_from_config,
-    create_observation_model,
-    create_reward_function,
-    create_wind_field,
 )
 from .registration import (
     ENV_ID,
@@ -63,12 +60,8 @@ __all__ = [
     "ComponentEnvironmentConfig",
     "EnvironmentConfig",
     "create_environment_config",
-    # Factory functions
-    "create_action_processor",
-    "create_observation_model",
-    "create_reward_function",
-    "create_concentration_field",
-    "create_wind_field",
+    # Compatibility adapter functions
+    "component_environment_config_to_spec",
     "component_environment_config_to_kwargs",
     "create_component_environment_from_config",
     "create_environment_from_config",
@@ -81,6 +74,7 @@ __all__ = [
     "LoadedPolicy",
     "PolicySpec",
     "SimulationSpec",
+    "create_simulation_spec",
     "load_policy",
     "reset_policy_if_possible",
     "build_env",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .._compat import ValidationError
 from ..core.types import (
@@ -20,6 +20,9 @@ from ..core.types import (
     create_coordinates,
     create_grid_size,
 )
+
+if TYPE_CHECKING:
+    from ..config.composition import SimulationSpec
 
 
 def _json_safe_value(value: Any) -> Any:
@@ -134,6 +137,26 @@ class EnvironmentConfig:
                 dict(self.plume_params) if self.plume_params else {}
             ),
         }
+
+    def to_simulation_spec(self) -> "SimulationSpec":
+        from ..config.composition import SimulationSpec
+
+        plume_sigma = None
+        if self.plume_params is not None:
+            sigma = self.plume_params.get("sigma")
+            if sigma is not None:
+                plume_sigma = float(sigma)
+
+        return SimulationSpec.model_validate(
+            {
+                "grid_size": self.grid_size.to_tuple(),
+                "source_location": self.source_location.to_tuple(),
+                "max_steps": self.max_steps,
+                "goal_radius": self.goal_radius,
+                "plume_sigma": plume_sigma,
+                "render": bool(self.enable_rendering),
+            }
+        )
 
 
 def create_environment_config(

@@ -78,3 +78,30 @@ def test_simulation_spec_accepts_zero_based_coordinates() -> None:
         assert info["agent_position"] == (0, 0)
     finally:
         env.close()
+
+
+def test_simulation_spec_preserves_step_size_wind_and_render_mode() -> None:
+    env = build_env(
+        SimulationSpec(
+            grid_size=(12, 12),
+            source_location=(4, 5),
+            max_steps=9,
+            action_type="oriented",
+            step_size=2,
+            observation_type="wind_vector",
+            wind_noise_std=0.25,
+            enable_wind=True,
+            wind_direction_deg=45.0,
+            wind_speed=1.5,
+            render=False,
+            render_mode="human",
+        )
+    )
+
+    try:
+        assert env.render_mode == "human"
+        assert getattr(env.action_model, "step_size", None) == 2
+        assert getattr(env.sensor_model, "noise_std", None) == 0.25
+        assert env.wind_field is not None
+    finally:
+        env.close()

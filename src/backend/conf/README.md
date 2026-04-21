@@ -20,13 +20,13 @@ conf/
 
 ```python
 from omegaconf import OmegaConf
-from plume_nav_sim.config import SimulationSpec, build_env
+from plume_nav_sim.config import build_env, create_simulation_spec
 
 # Load YAML
 cfg_dict = OmegaConf.to_container(OmegaConf.load("conf/experiment/sparse_simple.yaml"))
 
-# Parse into the structured simulation spec
-spec = SimulationSpec(**cfg_dict)
+# Normalize component-style YAML into the canonical SimulationSpec
+spec = create_simulation_spec(cfg_dict)
 
 # Create environment
 env = build_env(spec)
@@ -37,11 +37,11 @@ env = build_env(spec)
 ```python
 import hydra
 from omegaconf import DictConfig
-from plume_nav_sim.config import SimulationSpec, build_env
+from plume_nav_sim.config import build_env, create_simulation_spec
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig):
-    spec = SimulationSpec(**cfg)
+    spec = create_simulation_spec(cfg)
     env = build_env(spec)
 
     # Your training loop...
@@ -63,7 +63,7 @@ python train.py experiment=dense_oriented grid_size=[256,256]
 
 ```python
 from hydra import compose, initialize
-from plume_nav_sim.config import SimulationSpec, build_env
+from plume_nav_sim.config import build_env, create_simulation_spec
 
 with initialize(version_base=None, config_path="conf"):
     cfg = compose(config_name="config", overrides=[
@@ -72,7 +72,7 @@ with initialize(version_base=None, config_path="conf"):
         "action.step_size=2"
     ])
 
-    spec = SimulationSpec(**cfg)
+    spec = create_simulation_spec(cfg)
     env = build_env(spec)
 ```
 
