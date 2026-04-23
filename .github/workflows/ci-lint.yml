@@ -33,13 +33,12 @@ jobs:
           --config src/backend/pyproject.toml
           src/backend
 
-      - name: mypy (registration + config adapters)
+      - name: mypy (registration surface)
         run: >-
-          cd src/backend && python -m mypy
+          cd src/backend && python -m mypy --strict
           --config-file mypy.ini
-          -m plume_nav_sim.registration
-          -m plume_nav_sim.config.defaults
-          -m plume_nav_sim.config.factories
+          --follow-imports=skip
+          -p plume_nav_sim.registration
 
       - name: Construction guardrails
         run: >-

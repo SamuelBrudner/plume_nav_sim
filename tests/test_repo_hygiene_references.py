@@ -89,6 +89,13 @@ REMOVED_REFERENCES = {
     "src/backend/plume_nav_sim/envs/component_env.py": "component_env.py was removed",
     "src/backend/plume_nav_sim/core/episode_manager.py": "episode_manager.py was removed",
     "src/plume_nav_sim/envs/plume_search_env.py": "plume_search_env.py was removed",
+    "plume_nav_sim.config.factories": "the config compatibility factories module was removed",
+    "tests/debugger/test_gui_e2e.py": "that debugger test file does not exist",
+    "tests/debugger/test_driver_prefers_provider_action_names.py": "that debugger test file does not exist",
+    "tests/test_plug_and_play_capture_docs.py": "that plug-and-play docs test file does not exist",
+    "src/backend/tests/storage/test_zarr_policies.py": "that storage test path does not exist",
+    "src/backend/tests/plume_nav_sim/video/test_zarr_fixture_io.py": "that video test file does not exist",
+    "src/backend/tests/plume_nav_sim/io/test_zarr_policy.py": "that IO test path does not exist",
     "ComponentBasedEnvironment": "the deprecated environment implementation was removed",
     "create_component_environment": "the deprecated component environment adapter was removed",
     "ComponentEnvironmentConfig": "the compatibility config model was removed",
@@ -180,5 +187,7 @@ def test_active_docs_use_current_registered_env_id() -> None:
         text = path.read_text(encoding="utf-8")
         if "PlumeNav-StaticGaussian-v0" in text:
             failures.append(f"{path}: stale env id reference 'PlumeNav-StaticGaussian-v0'")
+        if "PlumeNav-Sim-v0" in text:
+            failures.append(f"{path}: stale env id reference 'PlumeNav-Sim-v0'")
 
     assert not failures, "\n".join(failures)

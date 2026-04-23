@@ -27,17 +27,16 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      - name: Install package with dev extras
-        run: python -m pip install -e "src/backend[dev]"
+      - name: Install package with dev and media extras
+        run: python -m pip install -e "src/backend[dev,media]"
 
       - name: Registration sanity (gym.make)
         run: |
           python - <<'PY'
           import gymnasium as gym
-          import plume_nav_sim as pns
-          from plume_nav_sim.registration import ensure_registered
+          from plume_nav_sim.registration import ENV_ID, ensure_registered
           ensure_registered()
-          env = gym.make("PlumeNav-Sim-v0", action_type="oriented")
+          env = gym.make(ENV_ID, action_type="oriented")
           obs, info = env.reset(seed=0)
           env.close()
           PY
